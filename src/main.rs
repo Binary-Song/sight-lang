@@ -10,6 +10,6 @@ fn main() {
 
 #[test]
 fn calculator1() {
-    print!("{:?}",syntax::ExprParser::new().parse("1+2*3"));
+    print!("{:?}",syntax::ExprParser::new().parse("lam x : int . 1+2*3"));
 }
 
