@@ -95,7 +95,11 @@ impl TestPrintV1 for L1Expr {
             L1Expr::UnitLit { .. } => "<UnitLit/>".to_string(),
             L1Expr::IntLit { value, .. } => format!("<IntLit value=\"{}\"/>", value),
             L1Expr::BoolLit { value, .. } => format!("<BoolLit value=\"{}\"/>", value),
-            L1Expr::Var { name, .. } => format!("<Var name=\"{}\"/>", name),
+            L1Expr::Var {
+                index,
+                context_depth,
+                ..
+            } => format!("<Var index=\"{}\" depth=\"{}\"/>", index, context_depth),
             L1Expr::UnaryOp { op, arg, .. } => {
                 format!("<UnaryOp op=\"{:?}\">{}</UnaryOp>", op, arg.print_v1())
             }

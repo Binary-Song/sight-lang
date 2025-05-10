@@ -2,18 +2,31 @@ lalrpop_mod!(pub syntax);
 use crate::ast::*;
 use crate::ast_tools::*;
 pub use lalrpop_util::lalrpop_mod;
+use std::collections::vec_deque;
+use std::collections::VecDeque;
 use std::fmt::format;
+use std::vec;
 use std::{f64::consts::E, fmt::Binary};
 
-fn l1_desug(e: Expr) -> L1Expr {
+
+
+fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
     match e {
         Expr::UnitLit { span } => L1Expr::UnitLit { span },
         Expr::IntLit { value, span } => L1Expr::IntLit { value, span },
         Expr::BoolLit { value, span } => L1Expr::BoolLit { value, span },
-        Expr::Var { name, span } => L1Expr::Var { name, span },
+        Expr::Var { name, span } => 
+        {
+            for (index, bind) in ctx.iter().enumerate() {
+                if bind.name == name {
+                    return L1Expr::Var { index, span, context_depth: ctx.len() };
+                }
+            }
+            panic!("Variable {} at {:?} is unbound.", name, span);
+        }
         Expr::UnaryOp { op, arg, span } => L1Expr::UnaryOp {
             op,
-            arg: Box::new(l1_desug(*arg)),
+            arg: Box::new(l1_desug(*arg, ctx)),
             span,
         },
         // Desugaring Rule: Linear-Seq to Binary-Seq 
@@ -39,7 +52,7 @@ fn l1_desug(e: Expr) -> L1Expr {
                     }
                 }
             }
-            l1_desug(seq_to_binary_op(seq, span))
+            l1_desug(seq_to_binary_op(seq, span), ctx)
         }
         Expr::BinaryOp {
             op,
@@ -70,11 +83,13 @@ fn l1_desug(e: Expr) -> L1Expr {
                 },
             ) = (op.clone(), *arg1.clone())
             {
+                let mut ctx2 = ctx.clone();
+                ctx2.push_front( Binding{name: name.clone(), ty: ty.clone(), span});
                 L1Expr::Let {
-                    name: name.clone(),
-                    ty: ty.clone(),
-                    init: Box::new(l1_desug(*expr)),
-                    body: Box::new(l1_desug(*arg2)),
+                    name: name,
+                    ty: ty,
+                    init: Box::new(l1_desug(*expr, ctx)),
+                    body: Box::new(l1_desug(*arg2, ctx2)),
                     span: span.clone(),
                 }
             }
@@ -82,35 +97,45 @@ fn l1_desug(e: Expr) -> L1Expr {
             else {
                 L1Expr::BinaryOp {
                     op,
-                    arg1: Box::new(l1_desug(*arg1)),
-                    arg2: Box::new(l1_desug(*arg2)),
+                    arg1: Box::new(l1_desug(*arg1, ctx.clone())),
+                    arg2: Box::new(l1_desug(*arg2, ctx)),
                     span,
                 }
             }
         }
         Expr::App { func, args, span } => L1Expr::App {
-            func: Box::new(l1_desug(*func)),
+            func: Box::new(l1_desug(*func, ctx.clone())),
             args: {
                 let mut result = Vec::new();
                 for arg in args {
-                    let desugd = l1_desug(arg);
+                    let desugd = l1_desug(arg, ctx.clone());
                     result.push(desugd);
                 }
                 result
             },
             span,
-        },
+        } ,
         Expr::Func {
             params,
             ret_ty,
             body,
             span,
-        } => L1Expr::Func {
+        } => {
+            let mut ctx2 = ctx.clone();
+            // add param bindings to context
+            for p in params.iter() {
+                ctx2.push_front(Binding {
+                        name: p.name.clone(),
+                        ty: p.ty.clone(),
+                        span: p.span,
+                });
+            }
+            L1Expr::Func {
             params,
             ret_ty,
-            body: Box::new(l1_desug(*body)),
+            body: Box::new(l1_desug(*body, ctx2)),
             span,
-        },
+        }},
         Expr::Let {
             name,
             ty,
@@ -136,23 +161,27 @@ fn test1() {
     let r0 = parse(
         "{
        let a = { 1;2;};
-       let b = { 3+4; 5*b };
+       let b = { 3+4; 5*a };
        {
          {
-           let x = fn (a: bool) { 6 };
+           let x = fn (a: bool) { 6 + a * b };
+           a + x + b
          }
        }
-       7
+       8
     }",
     )
     .unwrap();
+    print!("{}\n", r0.clone().print_v1());
+    let r1 = l1_desug(r0.clone(), vec_deque::VecDeque::new());
+    print!("{}\n", r1.clone().print_v1());
+
     assert_eq!(
         r0.print_v1(),
-        r#"<Seq><Item1><Let><Name>a</Name><Ty><None/></Ty><Expr><Seq><Item1><IntLit value="1"/></Item1><Item2><IntLit value="2"/></Item2><Item3><UnitLit/></Item3></Seq></Expr></Let></Item1><Item2><Let><Name>b</Name><Ty><None/></Ty><Expr><Seq><Item1><BinaryOp op="Add"><Arg1><IntLit value="3"/></Arg1><Arg2><IntLit value="4"/></Arg2></BinaryOp></Item1><Item2><BinaryOp op="Mul"><Arg1><IntLit value="5"/></Arg1><Arg2><Var name="b"/></Arg2></BinaryOp></Item2></Seq></Expr></Let></Item2><Item3><Seq><Item1><Seq><Item1><Let><Name>x</Name><Ty><None/></Ty><Expr><Func><Params><Item1><Binding Name="a"><Ty><Bool/></Ty></Binding></Item1></Params><RetTy><None/></RetTy><Body><Seq><Item1><IntLit value="6"/></Item1></Seq></Body></Func></Expr></Let></Item1><Item2><UnitLit/></Item2></Seq></Item1><Item2><UnitLit/></Item2></Seq></Item3><Item4><IntLit value="7"/></Item4></Seq>"#
+        r#""#
     );
-    let r1 = l1_desug(r0);
     assert_eq!(
         r1.print_v1(),
-        r#"<Let><Name>a</Name><Ty><None/></Ty><Expr><BinaryOp op="Seq"><Arg1><IntLit value="1"/></Arg1><Arg2><BinaryOp op="Seq"><Arg1><IntLit value="2"/></Arg1><Arg2><UnitLit/></Arg2></BinaryOp></Arg2></BinaryOp></Expr><Body><Let><Name>b</Name><Ty><None/></Ty><Expr><BinaryOp op="Seq"><Arg1><BinaryOp op="Add"><Arg1><IntLit value="3"/></Arg1><Arg2><IntLit value="4"/></Arg2></BinaryOp></Arg1><Arg2><BinaryOp op="Mul"><Arg1><IntLit value="5"/></Arg1><Arg2><Var name="b"/></Arg2></BinaryOp></Arg2></BinaryOp></Expr><Body><BinaryOp op="Seq"><Arg1><BinaryOp op="Seq"><Arg1><Let><Name>x</Name><Ty><None/></Ty><Expr><Func><Params><Item1><Binding Name="a"><Ty><Bool/></Ty></Binding></Item1></Params><RetTy><None/></RetTy><Body><IntLit value="6"/></Body></Func></Expr><Body><UnitLit/></Body></Let></Arg1><Arg2><UnitLit/></Arg2></BinaryOp></Arg1><Arg2><IntLit value="7"/></Arg2></BinaryOp></Body></Let></Body></Let>"#
+        r#""#
     );
 }

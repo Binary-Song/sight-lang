@@ -91,7 +91,8 @@ pub enum L1Expr {
     },
     // a var reference
     Var {
-        name: String,
+        index: usize,
+        context_depth: usize,
         span: (usize, usize),
     },
     // todo: support for overloading, when args have MUTUALLY EXCLUSIVE types
