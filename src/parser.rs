@@ -1,7 +1,9 @@
 lalrpop_mod!(pub syntax);
-use std::{f64::consts::E, fmt::Binary};
-pub use lalrpop_util::lalrpop_mod;
 use crate::ast::*;
+use crate::ast_tools::*;
+pub use lalrpop_util::lalrpop_mod;
+use std::fmt::format;
+use std::{f64::consts::E, fmt::Binary};
 
 fn l1_desug(e: Expr) -> L1Expr {
     match e {
@@ -36,23 +38,6 @@ fn l1_desug(e: Expr) -> L1Expr {
                         span: span,
                     }
                 }
-                // match seq {
-                //     [] => Expr::UnitLit{span: (0, 0)},
-                //     [e] => seq[0],
-                //     [first, rest] => {
-                //         let span = if rest. == 0 {
-                //             (first.0, first.1)
-                //         } else {
-                //             (first.0, rest.last().unwrap().1)
-                //         };
-                //         Expr::BinaryOp {
-                //             op: BinaryOp::Seq,
-                //             arg1: first,
-                //             arg2: Box::new(seq_to_binary_op(rest)),
-                //             span: span,
-                //         }
-                //     }
-                // }
             }
             l1_desug(seq_to_binary_op(seq, span))
         }
@@ -139,22 +124,35 @@ fn l1_desug(e: Expr) -> L1Expr {
     }
 }
 
-pub fn parse(input: &str) {
-    match syntax::ExprParser::new().parse(input) {
-        Ok(expr) => {
-            println!("Parsed successfully: {:?}", expr);
-            let expr1 = l1_desug(expr);
-            println!("L1 Desug: {:?}", expr1);
-        }
-        Err(err) => {
-            println!("Error parsing: {:?}", err);
-        }
-    }
+type ParserError<'a> =
+    lalrpop_util::ParseError<usize, lalrpop_util::lexer::Token<'a>, &'static str>;
+
+pub fn parse(input: &str) -> Result<Expr, ParserError> {
+    syntax::ExprParser::new().parse(input)
 }
 
 #[test]
-fn calculator1() {
-    parse("let a = 1; 1; a + 2; 3");
-    // syntax::ExprParser::new().parse("fn main(arg: bool) { 1 } (2, 3); { 1 }");
-    // print!("{:?}",a.unwrap());
+fn test1() {
+    let r0 = parse(
+        "{
+       let a = { 1;2;};
+       let b = { 3+4; 5*b };
+       {
+         {
+           let x = fn (a: bool) { 6 };
+         }
+       }
+       7
+    }",
+    )
+    .unwrap();
+    assert_eq!(
+        r0.print_v1(),
+        r#"<Seq><Item1><Let><Name>a</Name><Ty><None/></Ty><Expr><Seq><Item1><IntLit value="1"/></Item1><Item2><IntLit value="2"/></Item2><Item3><UnitLit/></Item3></Seq></Expr></Let></Item1><Item2><Let><Name>b</Name><Ty><None/></Ty><Expr><Seq><Item1><BinaryOp op="Add"><Arg1><IntLit value="3"/></Arg1><Arg2><IntLit value="4"/></Arg2></BinaryOp></Item1><Item2><BinaryOp op="Mul"><Arg1><IntLit value="5"/></Arg1><Arg2><Var name="b"/></Arg2></BinaryOp></Item2></Seq></Expr></Let></Item2><Item3><Seq><Item1><Seq><Item1><Let><Name>x</Name><Ty><None/></Ty><Expr><Func><Params><Item1><Binding Name="a"><Ty><Bool/></Ty></Binding></Item1></Params><RetTy><None/></RetTy><Body><Seq><Item1><IntLit value="6"/></Item1></Seq></Body></Func></Expr></Let></Item1><Item2><UnitLit/></Item2></Seq></Item1><Item2><UnitLit/></Item2></Seq></Item3><Item4><IntLit value="7"/></Item4></Seq>"#
+    );
+    let r1 = l1_desug(r0);
+    assert_eq!(
+        r1.print_v1(),
+        r#"<Let><Name>a</Name><Ty><None/></Ty><Expr><BinaryOp op="Seq"><Arg1><IntLit value="1"/></Arg1><Arg2><BinaryOp op="Seq"><Arg1><IntLit value="2"/></Arg1><Arg2><UnitLit/></Arg2></BinaryOp></Arg2></BinaryOp></Expr><Body><Let><Name>b</Name><Ty><None/></Ty><Expr><BinaryOp op="Seq"><Arg1><BinaryOp op="Add"><Arg1><IntLit value="3"/></Arg1><Arg2><IntLit value="4"/></Arg2></BinaryOp></Arg1><Arg2><BinaryOp op="Mul"><Arg1><IntLit value="5"/></Arg1><Arg2><Var name="b"/></Arg2></BinaryOp></Arg2></BinaryOp></Expr><Body><BinaryOp op="Seq"><Arg1><BinaryOp op="Seq"><Arg1><Let><Name>x</Name><Ty><None/></Ty><Expr><Func><Params><Item1><Binding Name="a"><Ty><Bool/></Ty></Binding></Item1></Params><RetTy><None/></RetTy><Body><IntLit value="6"/></Body></Func></Expr><Body><UnitLit/></Body></Let></Arg1><Arg2><UnitLit/></Arg2></BinaryOp></Arg1><Arg2><IntLit value="7"/></Arg2></BinaryOp></Body></Let></Body></Let>"#
+    );
 }
