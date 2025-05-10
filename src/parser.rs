@@ -64,7 +64,7 @@ fn l1_desug(e: Expr) -> L1Expr {
                 Expr::Let {
                     name,
                     ty,
-                    expr,
+                    init: expr,
                     span,
                     ..
                 },
@@ -73,7 +73,7 @@ fn l1_desug(e: Expr) -> L1Expr {
                 L1Expr::Let {
                     name: name.clone(),
                     ty: ty.clone(),
-                    expr: Box::new(l1_desug(*expr)),
+                    init: Box::new(l1_desug(*expr)),
                     body: Box::new(l1_desug(*arg2)),
                     span: span.clone(),
                 }
@@ -114,7 +114,7 @@ fn l1_desug(e: Expr) -> L1Expr {
         Expr::Let {
             name,
             ty,
-            expr,
+            init: expr,
             body,
             span,
         } => panic!("Let Expr can never be here. All Lets' should have been desugared by the let-lifting rule.
