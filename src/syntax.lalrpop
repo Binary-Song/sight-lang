@@ -52,7 +52,6 @@ PrimaryExpr: Expr = {
     <begin:@L> <t: "false"> <end:@R> => Expr::BoolLit{value: false, span: (begin, end)},
     "(" <e: Expr> ")" => e,
     <e:FnExpr> => e,
-    <e:CompoundExpr> => e,
 }
 
 Param: Binding = {
@@ -71,10 +70,17 @@ FnExpr: Expr = {
         span: (begin, end),
     }
 }
- 
 
 CompoundExpr: Expr = {
-    <begin:@L> "{" <e: Expr> "}" <end:@R> => e
+    "{" <e: CompoundExprContent> "}" => e 
+    
+}
+
+CompoundExprContent: Expr = {
+    <begin:@L> <e: (<Stmt>)* > <end:@R> => Expr::Seq { 
+        seq: e,
+        span: (begin, end)
+    },
 }
 
 pub OperatorExpr: Expr = {
@@ -119,30 +125,24 @@ pub OperatorExpr: Expr = {
     },
 };
 
-pub LetExpr: Expr = {
-    <begin:@L> "let" <name: IDENT> <ty: (":" <Ty>)?> "=" <expr: OperatorExpr> <end:@R> => Expr::Let {
+pub LetStmt: Expr = {
+    <begin:@L> "let" <name: IDENT> <ty: (":" <Ty>)?> "=" <expr: OperatorExpr> ";" <end:@R> => Expr::Let {
         name: name.to_string(),
         ty: ty,
         expr: Box::new(expr),
         body: (),
         span: (begin, end)
     },
-    <begin:@L> <e: OperatorExpr> <end:@R> => e,
-
 }
 
-pub SeqExpr: Expr = {
-    <begin:@L> <arg1: LetExpr> ";" <arg2: Expr> <end:@R> => Expr::BinaryOp {
-        op: BinaryOp::Seq,
-        arg1: Box::new(arg1),
-        arg2: Box::new(arg2),
-        span: (begin, end)
-    },
-    <begin:@L> <e: LetExpr> <end:@R> => e,
+pub Stmt: Expr = {
+    <begin:@L> <e: LetStmt> <end:@R> => e,
+    <begin:@L> <e: CompoundExpr> <end:@R> => e,
+    <e: Expr> ";" <end:@R> => e,
 }
 
 pub Expr: Expr = {
-    <e:SeqExpr> => e,
+    <e:OperatorExpr> => e,
 }
 
 PrimaryTy: Ty = {
