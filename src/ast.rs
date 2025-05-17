@@ -69,7 +69,6 @@ pub enum Expr {
         body: (),
         span: (usize, usize),
     },
-    // Linear-Seq
     Seq {
         seq: Vec<Self>,
         span: (usize, usize),
@@ -95,18 +94,6 @@ pub enum L1Expr {
         context_depth: usize,
         span: (usize, usize),
     },
-    // todo: support for overloading, when args have MUTUALLY EXCLUSIVE types
-    UnaryOp {
-        op: UnaryOp,
-        arg: Box<Self>,
-        span: (usize, usize),
-    },
-    BinaryOp {
-        op: BinaryOp,
-        arg1: Box<Self>,
-        arg2: Box<Self>,
-        span: (usize, usize),
-    },
     App {
         func: Box<Self>,
         args: Vec<Self>,
@@ -123,6 +110,10 @@ pub enum L1Expr {
         ty: Option<Ty>,
         init: Box<Self>,
         body: Box<Self>,
+        span: (usize, usize),
+    },
+    Seq {
+        seq: Vec<Self>,
         span: (usize, usize),
     },
 }
