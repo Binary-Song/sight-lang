@@ -1,65 +1,57 @@
 lalrpop_mod!(pub syntax);
 use crate::ast::*;
-use crate::ast_utils::*;
+use crate::utils::*;
 pub use lalrpop_util::lalrpop_mod;
-use std::collections::vec_deque;
 use std::collections::VecDeque;
-use std::fmt::format;
 use std::vec;
-use std::{f64::consts::E, fmt::Binary};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Context {
+    pub bindings: Vec<Binding>,
+}
 
-
-fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
+fn l1_desug(e: Expr, mut ctx: Context) -> Term {
     match e {
-        Expr::UnitLit { span } => L1Expr::UnitLit { span },
-        Expr::IntLit { value, span } => L1Expr::IntLit { value, span },
-        Expr::BoolLit { value, span } => L1Expr::BoolLit { value, span },
-        Expr::Var { name, span } => 
-        {
-            for (index, bind) in ctx.iter().enumerate() {
-                if bind.name == name {
-                    return L1Expr::Var { index, span, context_depth: ctx.len() };
-                }
-            }
-            panic!("Variable {} at {:?} is unbound. (todo: make this a proper error message)", name, span);
+        Expr::UnitLit { span } => Term::Literal { value: Literal::Unit, span },
+        Expr::IntLit { value, span } => Term::Literal { value: Literal::Int(value), span },
+        Expr::BoolLit { value, span } => Term::Literal { value: Literal::Bool(value), span },
+        Expr::Var { name, span } =>  {
+            Term::Var { name, span }
         }
-        Expr::UnaryOp { op, arg, span } => L1Expr::UnaryOp {
-            op,
-            arg: Box::new(l1_desug(*arg, ctx)),
-            span,
+        Expr::UnaryOp { op, arg, span } => Term::App {
+            callee: Box::new(Term::Op { op: Op::UnaryOp(op), span: span }), args: vec![l1_desug(*arg, ctx)], span: span
         },
-        Expr::Seq{seq, span: span_seq} => {
-            let result_exprs = vec![];
-            let seq = VecDeque::from(seq);
-            while let Some(expr) = seq.pop_front() {
-                if let Expr::Let { name, ty, init, body, span: span_let } = expr {
-                    // init-expr CANNOT use the 'let' variable
-                    let init = l1_desug(*init, ctx);
-                    // body CAN use the 'let' variable
-                    ctx.push_front(Binding{name: name.clone(), ty: ty.clone(), span: span_let.clone()});
-                    // body is what is left of the sequence
-                    let body = l1_desug(Expr::Seq { seq: Vec::from(seq), span: (span_let.1, span_seq.1) }, ctx);
-                    result_exprs.push(L1Expr::Let { name: name, ty: ty, init: Box::new(init), body: Box::new(body), span: span_let.clone() });
-                    // no need to continue, we already desugared the rest of the sequence as the body
-                    return L1Expr::Seq { seq: Vec::from(result_exprs) , span: span_seq} ;
-                } else {
-                    let e = l1_desug(expr, ctx.clone());
-                    result_exprs.push(e);
-                }
-            };
-            return L1Expr::Seq { seq: Vec::from(result_exprs) , span: span_seq} ;
-        }
         Expr::BinaryOp {
             op,
             arg1,
             arg2,
             span,
-        } => {
-            
-        }
-        Expr::App { func, args, span } => L1Expr::App {
-            func: Box::new(l1_desug(*func, ctx.clone())),
+        } => Term::App {
+            callee:Box::new(Term::Op { op: Op::BinaryOp(op), span: span }), args: vec![l1_desug(*arg1, ctx.clone()), l1_desug(*arg2, ctx)], span: span
+        },
+        Expr::Seq{seq, span: span_seq} => {
+            let mut res_seq: Vec<Term> = vec![];
+            // copy the seq to a deque
+            let mut seq = VecDeque::from(seq);
+            while let Some(expr) = seq.pop_front() {
+                if let Expr::Let { name, ty, init, span: span_let } = expr {
+                    // init-expr CANNOT use the 'let' variable
+                    let init = l1_desug(*init, ctx.clone());
+                    // body CAN use the 'let' variable
+                    ctx.bindings.push(Binding{name: name.clone(), ty: ty.clone(), span: span_let});
+                    // body is what is left of the sequence
+                    let body = l1_desug(Expr::Seq { seq: Vec::from(seq), span: (span_let.1, span_seq.1) }, ctx);
+                    res_seq.push(Term::Let { name: name, ty: ty, rhs: Box::new(init), body: Box::new(body), span: span_let.clone() });
+                    // no need to continue, we already desugared the rest of the sequence as the body
+                    return Term::Seq { seq: Vec::from(res_seq) , span: span_seq} ;
+                } else {
+                    res_seq.push(l1_desug(expr, ctx.clone()));
+                }
+            };
+            return Term::Seq { seq: Vec::from(res_seq) , span: span_seq} ;
+        },
+        Expr::App { func, args, span } => Term::App {
+            callee:  (Box::new(l1_desug(*func, ctx.clone()))),
             args: {
                 let mut result = Vec::new();
                 for arg in args {
@@ -76,28 +68,22 @@ fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
             body,
             span,
         } => {
-            let mut ctx2 = ctx.clone();
+            let mut ctx = ctx.clone();
             // add param bindings to context
             for p in params.iter() {
-                ctx2.push_front(Binding {
+                ctx.bindings.push(Binding {
                         name: p.name.clone(),
                         ty: p.ty.clone(),
                         span: p.span,
                 });
             }
-            L1Expr::Func {
+            Term::Func {
             params,
             ret_ty,
-            body: Box::new(l1_desug(*body, ctx2)),
+            body: Box::new(l1_desug(*body, ctx)),
             span,
         }},
-        Expr::Let {
-            name,
-            ty,
-            init: expr,
-            body,
-            span,
-        } => panic!("Let Expr can never be here. All Lets' should have been desugared by the let-lifting rule.
+        Expr::Let {..} => panic!("Let Expr can never be here. All Lets' should have been desugared by the let-lifting rule.
         If you see this, that probably means this Let did not show up as a left child of a Binary-Seq.
         A parser bug maybe?
         "),
@@ -107,27 +93,20 @@ fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
 type ParserError<'a> =
     lalrpop_util::ParseError<usize, lalrpop_util::lexer::Token<'a>, &'static str>;
 
-pub fn parse(input: &str) -> Result<Expr, ParserError> {
-    syntax::ExprParser::new().parse(input)
+pub fn parse(input: &str) -> Result<Term, ParserError> {
+    let e =  syntax::ExprParser::new().parse(input)?;
+    let r = l1_desug(e, Context { bindings: vec![] });
+    Ok(r)
 }
 
 #[test]
 fn test1() {
-    let r0 = parse(
+    let r0: Term = parse(
         "{
-       let a = { 1;2;};
-       let b = { 3+4; 5*a };
-       {
-         {
-           let x = fn (a: bool) { 6 + a * b };
-           a + x + b
-         }
-       }
-       8
+       let a = { 1 + 1; let b = a + 2; };
+       3
     }",
     )
     .unwrap();
-    print!("{}\n", r0.clone().print_v1());
-    let r1 = l1_desug(r0.clone(), vec_deque::VecDeque::new());
-    print!("{}\n", r1.clone().print_v1());
+    print!("L1: \n{}\n", r0.clone().print_v1());
 }
