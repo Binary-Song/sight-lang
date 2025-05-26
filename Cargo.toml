@@ -11,3 +11,7 @@ dough-utils = { path = "dough-utils" }
 [dependencies]
 lalrpop-util = { version = "0.22.1", features = ["lexer", "unicode"] }
 regex = "1.10"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+xml-rs = "0.8.26"

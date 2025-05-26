@@ -1,25 +1,12 @@
-// use std::collections::{vec_deque, VecDeque};
-// use std::hash::{Hash, Hasher};
-// use std::iter::Map;
-// use std::ptr;
-// use std::{
-//     cell::RefCell,
-//     collections::{HashMap, HashSet},
-//     ops::DerefMut,
-//     rc::Rc,
-//     vec,
-// };
-
 use crate::{
-    ast::{Literal, Term, Ty},
-    utils::TestPrintV1,
+    ast::{Lit, Term, Ty},
+    compat_serialize::IntoTreeWithContext,
 };
 use std::{
     arch::x86_64,
     collections::{HashMap, HashSet, VecDeque},
     fmt::{format, Debug},
 };
-
 use crate::ast::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -31,9 +18,9 @@ pub enum PrimitiveType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
-    PrimitiveType(PrimitiveType),
-    Function { lhs: Vec<Type>, rhs: Box<Type> },
-    Variable { name: i32 },
+    Primitive(PrimitiveType),
+    Func { lhs: Vec<Type>, rhs: Box<Type> },
+    Var { name: i32 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -55,7 +42,7 @@ impl Context {
 
 fn fresh_var(context: &mut Context) -> Type {
     context.last_var_name += 1;
-    Type::Variable {
+    Type::Var {
         name: context.last_var_name,
     }
 }
@@ -66,9 +53,9 @@ fn constrain(lhs: Type, rhs: Type, context: &mut Context) {
 
 fn syntax_type_to_real_type(ty: Ty) -> Type {
     match ty {
-        Ty::Bool { span } => Type::PrimitiveType(PrimitiveType::Bool),
-        Ty::Int { span } => Type::PrimitiveType(PrimitiveType::Int),
-        Ty::Arrow { l, r, span } => Type::Function {
+        Ty::Bool { span } => Type::Primitive(PrimitiveType::Bool),
+        Ty::Int { span } => Type::Primitive(PrimitiveType::Int),
+        Ty::Arrow { l, r, span } => Type::Func {
             lhs: vec![syntax_type_to_real_type(*l)],
             rhs: Box::new(syntax_type_to_real_type(*r)),
         },
@@ -77,10 +64,10 @@ fn syntax_type_to_real_type(ty: Ty) -> Type {
 
 fn type_of(term: Term, context: &mut Context) -> Type {
     match term {
-        Term::Literal { value, span } => match value {
-            Literal::Unit => Type::PrimitiveType(PrimitiveType::Unit),
-            Literal::Int(_) => Type::PrimitiveType(PrimitiveType::Int),
-            Literal::Bool(_) => Type::PrimitiveType(PrimitiveType::Bool),
+        Term::Lit { value, span } => match value {
+            Lit::Unit => Type::Primitive(PrimitiveType::Unit),
+            Lit::Int(_) => Type::Primitive(PrimitiveType::Int),
+            Lit::Bool(_) => Type::Primitive(PrimitiveType::Bool),
         },
         Term::Var { name, span } => context
             .var_types
@@ -96,7 +83,7 @@ fn type_of(term: Term, context: &mut Context) -> Type {
                 .iter()
                 .map(|arg| type_of(arg.clone(), context))
                 .collect::<Vec<_>>();
-            let res_type = Type::Function {
+            let res_type = Type::Func {
                 lhs: arg_types,
                 rhs: Box::new(result_rhs_type),
             };
@@ -132,7 +119,7 @@ fn type_of(term: Term, context: &mut Context) -> Type {
                 param_count -= 1;
             }
             // ret the func type
-            Type::Function {
+            Type::Func {
                 lhs: param_types,
                 rhs: Box::new(body_ty),
             }
@@ -165,26 +152,26 @@ fn type_of(term: Term, context: &mut Context) -> Type {
             .iter()
             .map(|term| type_of(term.clone(), context))
             .last()
-            .unwrap_or(Type::PrimitiveType(PrimitiveType::Unit)),
-        Term::Op { .. } => Type::Function {
-            lhs: vec![Type::PrimitiveType(PrimitiveType::Int)],
-            rhs: Box::new(Type::PrimitiveType(PrimitiveType::Int)),
+            .unwrap_or(Type::Primitive(PrimitiveType::Unit)),
+        Term::Op { .. } => Type::Func {
+            lhs: vec![Type::Primitive(PrimitiveType::Int)],
+            rhs: Box::new(Type::Primitive(PrimitiveType::Int)),
         },
     }
 }
 
 fn apply_solution(ty: Type, sln: &HashSet<(Type, Type)>) -> Type {
     match ty {
-        Type::PrimitiveType(p) => Type::PrimitiveType(p),
-        Type::Function { lhs, rhs } => {
+        Type::Primitive(p) => Type::Primitive(p),
+        Type::Func { lhs, rhs } => {
             let new_lhs = lhs.into_iter().map(|t| apply_solution(t, sln)).collect();
             let new_rhs = apply_solution(*rhs, sln);
-            Type::Function {
+            Type::Func {
                 lhs: new_lhs,
                 rhs: Box::new(new_rhs),
             }
         }
-        var @ Type::Variable { name } => {
+        var @ Type::Var { name } => {
             if let Some((_, sln_dst)) = sln.iter().find(|(sln_src, _)| sln_src == &var) {
                 sln_dst.clone()
             } else {
@@ -204,8 +191,8 @@ fn type_term(term: Term) -> Option<Type> {
 
 fn fv(ty: &Type) -> Vec<Type> {
     match ty {
-        Type::PrimitiveType(_) => vec![],
-        Type::Function { lhs, rhs } => {
+        Type::Primitive(_) => vec![],
+        Type::Func { lhs, rhs } => {
             let mut result = vec![];
             for arg in lhs.iter() {
                 result.extend(fv(arg));
@@ -213,7 +200,7 @@ fn fv(ty: &Type) -> Vec<Type> {
             result.extend(fv(rhs));
             result
         }
-        Type::Variable { name } => vec![ty.clone()],
+        Type::Var { name } => vec![ty.clone()],
     }
 }
 
@@ -238,12 +225,12 @@ fn compose_replacements(
     gamma_src: Type,
     gamma_dst: Type,
 ) -> HashSet<(Type, Type)> {
-    print!(
-        "compose_replacements: sigma = {}, gamma src = {}, dst = {}\n",
-        sigma.print_v1(),
-        gamma_src.print_v1(),
-        gamma_dst.print_v1()
-    );
+    // print!(
+    //     "compose_replacements: sigma = {}, gamma src = {}, dst = {}\n",
+    //     sigma.to_tree_v1(),
+    //     gamma_src.to_tree_v1(),
+    //     gamma_dst.to_tree_v1()
+    // );
     let mut res: HashSet<(Type, Type)> = sigma
         .iter()
         .map(|(src, dst)| {
@@ -260,7 +247,7 @@ fn compose_replacements(
     if res.iter().find(|(a, b)| a == &gamma_src).is_none() {
         res.insert((gamma_src.clone(), gamma_dst.clone()));
     }
-    print!("compose_replacements result: {}\n", res.print_v1());
+    // print!("compose_replacements result: {}\n", res.to_tree_v1());
     res
 }
 
@@ -275,18 +262,18 @@ fn unify(mut C: HashSet<(Type, Type)>) -> Option<HashSet<(Type, Type)>> {
                 return unify(C);
             } else {
                 match (lhs, rhs) {
-                    (X @ Type::Variable { .. }, T) | (T, X @ Type::Variable { .. })
+                    (X @ Type::Var { .. }, T) | (T, X @ Type::Var { .. })
                         if !fv(&T).contains(&X) =>
                     {
                         let mut C = unify(replace_constraints(C, &X, &T))?;
                         Some(compose_replacements(C, X, T))
                     }
                     (
-                        Type::Function {
+                        Type::Func {
                             lhs: S_lhs,
                             rhs: S_rhs,
                         },
-                        Type::Function {
+                        Type::Func {
                             lhs: T_lhs,
                             rhs: T_rhs,
                         },
@@ -307,52 +294,52 @@ fn unify(mut C: HashSet<(Type, Type)>) -> Option<HashSet<(Type, Type)>> {
     unsafe {
         lvl += 1;
     }
-    print!("[{}] unifying: {}\n", unsafe { lvl }, C.print_v1());
+    // print!("[{}] unifying: {}\n", unsafe { lvl }, C.to_tree_v1());
     let res: Option<HashSet<(Type, Type)>> = unify_impl(C);
-    print!("[{}] unify result: {}\n", unsafe { lvl }, res.print_v1());
+    // print!("[{}] unify result: {}\n", unsafe { lvl }, res.to_tree_v1());
     unsafe {
         lvl -= 1;
     }
     return res;
 }
 
-impl TestPrintV1 for Context {
-    fn print_v1(self: &Self) -> String {
-        let mut string = String::new();
-        for (lhs, rhs) in self.constraints.iter() {
-            string += &format!("    {} = {}\n", lhs.print_v1(), rhs.print_v1());
-        }
-        format!("Constr (\n{})", string)
-    }
-}
+// impl ToTree for Context {
+//     fn to_tree_v1(self: &Self) -> String {
+//         let mut string = String::new();
+//         for (lhs, rhs) in self.constraints.iter() {
+//             string += &format!("    {} = {}\n", lhs.to_tree_v1(), rhs.to_tree_v1());
+//         }
+//         format!("Constr (\n{})", string)
+//     }
+// }
 
-impl TestPrintV1 for HashSet<(Type, Type)> {
-    fn print_v1(self: &Self) -> String {
-        let mut string = String::new();
-        for (lhs, rhs) in self.iter() {
-            string += &format!("    {} = {}\n", lhs.print_v1(), rhs.print_v1());
-        }
-        format!("Constr (\n{})", string)
-    }
-}
+// impl ToTree for HashSet<(Type, Type)> {
+//     fn to_tree_v1(self: &Self) -> String {
+//         let mut string = String::new();
+//         for (lhs, rhs) in self.iter() {
+//             string += &format!("    {} = {}\n", lhs.to_tree_v1(), rhs.to_tree_v1());
+//         }
+//         format!("Constr (\n{})", string)
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parser::parse;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::parser::parse;
 
-    #[test]
-    fn test() {
-        // fn (x: Int) { x }
-        let expr = parse("{ let f = fn (x, y) { x }; f(1,2)} ").unwrap();
-        let mut context = Context::empty();
-        let ty = type_of(expr.clone(), &mut context);
-        println!(
-            "Expr: \n{:?}\n Type: \n{}\n Context: \n{}\n",
-            expr,
-            ty.print_v1(),
-            context.print_v1()
-        );
-        println!("\n\nSolu: {}", type_term(expr).print_v1());
-    }
-}
+//     #[test]
+//     fn test() {
+//         // fn (x: Int) { x }
+//         let expr = parse("{ let f = fn (x, y) { x }; f(1,2)} ").unwrap();
+//         let mut context = Context::empty();
+//         let ty = type_of(expr.clone(), &mut context);
+//         println!(
+//             "Expr: \n{:?}\n Type: \n{}\n Context: \n{}\n",
+//             expr,
+//             ty.to_tree_v1(),
+//             context.to_tree_v1()
+//         );
+//         println!("\n\nSolu: {}", type_term(expr).to_tree_v1());
+//     }
+// }

@@ -21,7 +21,7 @@ pub enum Op {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Literal {
+pub enum Lit {
     Unit,
     Int(i32),
     Bool(bool),
@@ -57,12 +57,14 @@ pub enum Expr {
         op: UnaryOp,
         arg: Box<Self>,
         span: (usize, usize),
+        op_span: (usize, usize),
     },
     BinaryOp {
         op: BinaryOp,
-        arg1: Box<Self>,
-        arg2: Box<Self>,
+        lhs: Box<Self>,
+        rhs: Box<Self>,
         span: (usize, usize),
+        op_span: (usize, usize),
     },
     App {
         func: Box<Self>,
@@ -78,7 +80,7 @@ pub enum Expr {
     Let {
         name: String,
         ty: Option<Ty>,
-        init: Box<Self>,
+        rhs: Box<Self>,
         span: (usize, usize),
     },
     Seq {
@@ -89,8 +91,8 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Term {
-    Literal {
-        value: Literal,
+    Lit {
+        value: Lit,
         span: (usize, usize),
     },
     // a var reference
