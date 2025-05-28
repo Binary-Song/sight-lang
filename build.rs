@@ -1,4 +1,4 @@
-use dough_utils::syntax::syntax_to_file;
+use sight_utils::syntax::syntax_to_file;
 use std::path::Path;
 fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");

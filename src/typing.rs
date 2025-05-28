@@ -6,7 +6,6 @@ use crate::{
 };
 use log::debug;
 use std::{
-    arch::x86_64,
     collections::{HashMap, HashSet, VecDeque},
     fmt::{format, Debug},
 };
