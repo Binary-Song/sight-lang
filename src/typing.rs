@@ -1,8 +1,6 @@
 use crate::ast::*;
-use crate::compat_serialize::{Span, TreeContext};
 use crate::{
-    ast::{Lit, Term, Ty},
-    compat_serialize::IntoTreeWithContext,
+    ast::{Lit, Term, TypeExpr},
 };
 use log::debug;
 use std::{
@@ -20,8 +18,9 @@ pub enum PrimitiveType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Primitive(PrimitiveType),
-    Func { lhs: Vec<Type>, rhs: Box<Type> },
+    Func { lhs: Box<Type>, rhs: Box<Type> },
     Var { name: i32 },
+    Tuple { elems: Vec<Type> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -65,13 +64,20 @@ fn constrain(lhs: Type, rhs: Type, context: &mut Context) {
     context.constraints.push((lhs, rhs));
 }
 
-fn syntax_type_to_real_type(ty: Ty) -> Type {
+fn syntax_type_to_real_type(ty: TypeExpr) -> Type {
     match ty {
-        Ty::Bool { span } => Type::Primitive(PrimitiveType::Bool),
-        Ty::Int { span } => Type::Primitive(PrimitiveType::Int),
-        Ty::Arrow { l, r, span } => Type::Func {
-            lhs: vec![syntax_type_to_real_type(*l)],
+        TypeExpr::Bool { span } => Type::Primitive(PrimitiveType::Bool),
+        TypeExpr::Int { span } => Type::Primitive(PrimitiveType::Int),
+        TypeExpr::Arrow {
+            lhs: l,
+            rhs: r,
+            span,
+        } => Type::Func {
+            lhs: Box::new(syntax_type_to_real_type(*l)),
             rhs: Box::new(syntax_type_to_real_type(*r)),
+        },
+        TypeExpr::Tuple { elems, span } => Type::Tuple {
+            elems: elems.into_iter().map(syntax_type_to_real_type).collect(),
         },
     }
 }
@@ -99,53 +105,39 @@ fn type_of(term: Term, context: &mut Context) -> Type {
             .unwrap()
             .1
             .clone(),
-        Term::App { callee, args, span } => {
+        Term::App { callee, arg, span } => {
             let callee_type = type_of(*callee, context);
-            let arg_types = args
-                .iter()
-                .map(|arg| type_of(arg.clone(), context))
-                .collect::<Vec<_>>();
-            let rhs_type = fresh_var(context);
-            let func_type = Type::Func {
-                lhs: arg_types,
-                rhs: Box::new(rhs_type.clone()),
+            let expected_callee_rhs_type = fresh_var(context);
+            let expected_callee_type = Type::Func {
+                lhs: Box::new(type_of(*arg, context)),
+                rhs: Box::new(expected_callee_rhs_type.clone()),
             };
             // constraint: callee should be a function that
             // happen to accept the exact arg types.
-            constrain(callee_type, func_type.clone(), context);
-            rhs_type
+            constrain(callee_type, expected_callee_type, context);
+            expected_callee_rhs_type
         }
         Term::Func {
-            params,
+            param,
             ret_ty,
             body,
             span,
         } => {
-            let mut param_count = 0;
-            let mut param_types = vec![];
-            for param in params {
-                let param_ty = match param.ty {
-                    // if annotated, use the type
-                    Some(ty) => syntax_type_to_real_type(ty),
-                    // else create a new type variable
-                    None => fresh_var(context),
-                };
-                context
-                    .var_types
-                    .push_front((param.name.clone(), param_ty.clone()));
-                param_count += 1;
-                param_types.push(param_ty);
-            }
+            let param_ty = match param.ty {
+                // if annotated, use the type
+                Some(ty) => syntax_type_to_real_type(ty),
+                // else create a new type variable
+                None => fresh_var(context),
+            };
+            context
+                .var_types
+                .push_front((param.name.clone(), param_ty.clone()));
             // type the body, with params in the context
             let body_ty = type_of(*body, context);
-            // pop the context
-            while param_count > 0 {
-                context.var_types.pop_front();
-                param_count -= 1;
-            }
+            context.var_types.pop_front();
             // ret the func type
             Type::Func {
-                lhs: param_types,
+                lhs: Box::new(param_ty),
                 rhs: Box::new(body_ty),
             }
         }
@@ -181,9 +173,16 @@ fn type_of(term: Term, context: &mut Context) -> Type {
             .last()
             .unwrap_or(Type::Primitive(PrimitiveType::Unit)),
         Term::Op { .. } => Type::Func {
-            lhs: vec![Type::Primitive(PrimitiveType::Int)],
+            lhs: Box::new(Type::Primitive(PrimitiveType::Int)),
             rhs: Box::new(Type::Primitive(PrimitiveType::Int)),
         },
+        Term::Tuple { elems, span } => {
+            let elem_types = elems
+                .into_iter()
+                .map(|e| type_of(e, context))
+                .collect::<Vec<_>>();
+            Type::Tuple { elems: elem_types }
+        }
     };
     context.recursion -= 1;
     debug!(
@@ -218,13 +217,18 @@ fn fv(ty: &Type) -> Vec<Type> {
         Type::Primitive(_) => vec![],
         Type::Func { lhs, rhs } => {
             let mut result = vec![];
-            for arg in lhs.iter() {
-                result.extend(fv(arg));
-            }
+            result.extend(fv(lhs));
             result.extend(fv(rhs));
             result
         }
         Type::Var { name } => vec![ty.clone()],
+        Type::Tuple { elems } => {
+            let mut result = vec![];
+            for elem in elems.iter() {
+                result.extend(fv(elem));
+            }
+            result
+        }
     }
 }
 
@@ -268,10 +272,7 @@ impl Substitution {
             match ty {
                 Type::Primitive(_) => ty,
                 Type::Func { lhs, rhs } => {
-                    let new_lhs = lhs
-                        .into_iter()
-                        .map(|t| apply_one(t, from, to))
-                        .collect::<Vec<_>>();
+                    let new_lhs = Box::new(apply_one(*lhs, from, to));
                     let new_rhs = Box::new(apply_one(*rhs, from, to));
                     Type::Func {
                         lhs: new_lhs,
@@ -284,6 +285,10 @@ impl Substitution {
                     } else {
                         ty
                     }
+                }
+                Type::Tuple { elems } => {
+                    let new_elems = elems.into_iter().map(|e| apply_one(e, from, to)).collect();
+                    Type::Tuple { elems: new_elems }
                 }
             }
         }
@@ -340,10 +345,8 @@ fn unify_with_rec(c: HashSet<(Type, Type)>, recursion: i32) -> Option<Substituti
                     lhs: t_lhs,
                     rhs: t_rhs,
                 },
-            ) if s_lhs.len() == t_lhs.len() => {
-                s_lhs.iter().zip(t_lhs.iter()).for_each(|(s, t)| {
-                    c.insert((s.clone(), t.clone()));
-                });
+            ) => {
+                c.insert((*s_lhs, *t_lhs));
                 c.insert((*s_rhs, *t_rhs));
                 return unify_with_rec(c, recursion + 1);
             }
@@ -402,6 +405,7 @@ impl DebugPrint for Type {
             Type::Primitive(_) => 0,
             Type::Var { .. } => 0,
             Type::Func { lhs, rhs } => 1,
+            Type::Tuple { elems } => 100, // "," binds weakly
         }
     }
 
@@ -409,18 +413,22 @@ impl DebugPrint for Type {
         match self {
             Type::Primitive(p) => format!("{p:?}"),
             Type::Func { lhs, rhs } => {
-                let lhs_str = lhs
-                    .iter()
-                    .map(|t| t.dbg_print(ctx))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if lhs.len() == 1 {
-                    format!("{} -> {}", lhs_str, rhs.dbg_print(ctx))
-                } else {
-                    format!("({lhs_str}) -> {}", rhs.dbg_print(ctx))
-                }
+                format!("{} -> {}", lhs.dbg_print(ctx), rhs.dbg_print(ctx))
             }
             Type::Var { name } => format!("T{name}"),
+            Type::Tuple { elems } => {
+                if elems.is_empty() {
+                    "()".to_string()
+                } else if elems.len() == 1 {
+                    format!("tup({})", elems[0].dbg_print(ctx))
+                } else {
+                    elems
+                        .iter()
+                        .map(|t| t.dbg_print(ctx))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            }
         }
     }
 }
@@ -463,73 +471,208 @@ where
         }
     }
 }
-
 #[cfg(test)]
-fn test_unify(source: &str, expected: Option<Type>) {
-    use crate::ast::Term;
-    use crate::compat_serialize::TreeContext;
-    use crate::parser::parse;
-    use pretty_assertions::assert_eq;
-    colog::default_builder()
-        .filter_level(log::LevelFilter::Debug)
-        .init();
-    let term = parse(source).unwrap();
-    debug!(
-        "term: {term}",
-        term = term
-            .into_tree(&TreeContext {
-                src: source.to_string(),
-                version: 1
-            })
-            .to_xml(&TreeContext {
-                src: source.to_string(),
-                version: 1
-            })
-    );
-    let ty = type_term_with_source(term, source);
-    assert_eq!(ty, expected,);
+fn test_type_term(term: Term, expected: Option<Type>) {
+    let ty: Option<Type> = type_term(term);
+    assert_eq!(ty, expected);
 }
 
 #[test]
 fn unify_test1() {
-    test_unify(
-        "
-{
-    let a = 1;
-    let f = fn (x) { x };
-    let b = f(a);
-    b
-}
-    ",
-        Some(Type::Primitive(PrimitiveType::Int)),
-    )
+    // term before desugaring:
+    // {
+    //     let a = 1;
+    //     let f = fn (x) { x };
+    //     let b = f(a);
+    //     b
+    // }
+    let term = Term::Seq {
+        seq: vec![Term::Let {
+            name: "a".to_string(),
+            ty: None,
+            rhs: Box::new(Term::Lit {
+                value: Lit::Int(1),
+                span: (15, 16),
+            }),
+            body: Box::new(Term::Seq {
+                seq: vec![Term::Let {
+                    name: "f".to_string(),
+                    ty: None,
+                    rhs: Box::new(Term::Func {
+                        param: Box::new(Binding {
+                            name: "x".to_string(),
+                            ty: None,
+                            span: (34, 35),
+                        }),
+                        ret_ty: None,
+                        body: Box::new(Term::Seq {
+                            seq: vec![Term::Var {
+                                name: "x".to_string(),
+                                span: (39, 40),
+                            }],
+                            span: (39, 40),
+                        }),
+                        span: (30, 42),
+                    }),
+                    body: Box::new(Term::Seq {
+                        seq: vec![Term::Let {
+                            name: "b".to_string(),
+                            ty: None,
+                            rhs: Box::new(Term::App {
+                                callee: Box::new(Term::Var {
+                                    name: "f".to_string(),
+                                    span: (56, 57),
+                                }),
+                                arg: Box::new(Term::Var {
+                                    name: "a".to_string(),
+                                    span: (58, 59),
+                                }),
+                                span: (56, 60),
+                            }),
+                            body: Box::new(Term::Seq {
+                                seq: vec![Term::Var {
+                                    name: "b".to_string(),
+                                    span: (66, 67),
+                                }],
+                                span: (61, 67),
+                            }),
+                            span: (48, 61),
+                        }],
+                        span: (43, 67),
+                    }),
+                    span: (22, 43),
+                }],
+                span: (17, 67),
+            }),
+            span: (7, 17),
+        }],
+        span: (7, 67),
+    };
+    test_type_term(term, Some(Type::Primitive(PrimitiveType::Int)))
 }
 
 #[test]
 fn unify_test2() {
-    test_unify(
-        "
-{
-    let x = 1;
-    let f = fn (x: bool) { x };
-    f(x)
-}
-    ",
+    // term before desugaring:
+    // {
+    //     let x = 1;
+    //     let f = fn (x: bool) { x };
+    //     f(x)
+    // }
+    test_type_term(
+        Term::Seq {
+            seq: vec![Term::Let {
+                name: "x".to_string(),
+                ty: None,
+                rhs: Box::new(Term::Lit {
+                    value: Lit::Int(1),
+                    span: (15, 16),
+                }),
+                body: Box::new(Term::Seq {
+                    seq: vec![Term::Let {
+                        name: "f".to_string(),
+                        ty: None,
+                        rhs: Box::new(Term::Func {
+                            param: Box::new(Binding {
+                                name: "x".to_string(),
+                                ty: Some(TypeExpr::Bool { span: (37, 41) }),
+                                span: (34, 41),
+                            }),
+                            ret_ty: None,
+                            body: Box::new(Term::Seq {
+                                seq: vec![Term::Var {
+                                    name: "x".to_string(),
+                                    span: (45, 46),
+                                }],
+                                span: (45, 46),
+                            }),
+                            span: (30, 48),
+                        }),
+                        body: Box::new(Term::Seq {
+                            seq: vec![Term::App {
+                                callee: Box::new(Term::Var {
+                                    name: "f".to_string(),
+                                    span: (54, 55),
+                                }),
+                                arg: Box::new(Term::Var {
+                                    name: "x".to_string(),
+                                    span: (56, 57),
+                                }),
+                                span: (54, 58),
+                            }],
+                            span: (49, 58),
+                        }),
+                        span: (22, 49),
+                    }],
+                    span: (17, 58),
+                }),
+                span: (7, 17),
+            }],
+            span: (7, 58),
+        },
         None,
     )
 }
 
 #[test]
 fn unify_test3() {
-    test_unify(
-        "
-{
-    let x = 1;
-    let f = fn (x) -> bool { x };
-    f(x)
-}
-    ",
+    // term before desugaring:
+    // {
+    //     let x = 1;
+    //     let f = fn (x: bool) { x };
+    //     f(x)
+    // }
+    test_type_term(
+        Term::Seq {
+            seq: vec![Term::Let {
+                name: "x".to_string(),
+                ty: None,
+                rhs: Box::new(Term::Lit {
+                    value: Lit::Int(1),
+                    span: (15, 16),
+                }),
+                body: Box::new(Term::Seq {
+                    seq: vec![Term::Let {
+                        name: "f".to_string(),
+                        ty: None,
+                        rhs: Box::new(Term::Func {
+                            param: Box::new(Binding {
+                                name: "x".to_string(),
+                                ty: None,
+                                span: (34, 35),
+                            }),
+                            ret_ty: Some(TypeExpr::Bool { span: (40, 44) }),
+                            body: Box::new(Term::Seq {
+                                seq: vec![Term::Var {
+                                    name: "x".to_string(),
+                                    span: (47, 48),
+                                }],
+                                span: (47, 48),
+                            }),
+                            span: (30, 50),
+                        }),
+                        body: Box::new(Term::Seq {
+                            seq: vec![Term::App {
+                                callee: Box::new(Term::Var {
+                                    name: "f".to_string(),
+                                    span: (56, 57),
+                                }),
+                                arg: Box::new(Term::Var {
+                                    name: "x".to_string(),
+                                    span: (58, 59),
+                                }),
+                                span: (56, 60),
+                            }],
+                            span: (51, 60),
+                        }),
+                        span: (22, 51),
+                    }],
+                    span: (17, 60),
+                }),
+                span: (7, 17),
+            }],
+            span: (7, 60),
+        },
         None,
     )
 }
-
