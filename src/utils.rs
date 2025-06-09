@@ -1,4 +1,7 @@
+use std::fmt::format;
+
 use super::ast::*;
+use crate::typing::*;
 
 /// used for unit testing, designed to not break easily
 /// when the AST changes
@@ -72,7 +75,6 @@ impl TestPrintV1 for Expr {
                 name,
                 ty,
                 init: expr,
-                body,
                 span,
             } => {
                 format!(
@@ -89,25 +91,30 @@ impl TestPrintV1 for Expr {
     }
 }
 
-impl TestPrintV1 for L1Expr {
-    fn print_v1(self: &L1Expr) -> String {
+impl TestPrintV1 for Term {
+    fn print_v1(self: &Term) -> String {
         match self {
-            L1Expr::UnitLit { .. } => "<UnitLit/>".to_string(),
-            L1Expr::IntLit { value, .. } => format!("<IntLit value=\"{}\"/>", value),
-            L1Expr::BoolLit { value, .. } => format!("<BoolLit value=\"{}\"/>", value),
-            L1Expr::Var {
-                index,
-                context_depth,
+            Term::Literal {
+                value: Literal::Unit,
                 ..
-            } => format!("<Var index=\"{}\" depth=\"{}\"/>", index, context_depth),
-            L1Expr::App { func, args, .. } => {
+            } => "<UnitLit/>".to_string(),
+            Term::Literal {
+                value: Literal::Bool(value),
+                ..
+            } => format!("<BoolLit value=\"{}\"/>", value),
+            Term::Literal {
+                value: Literal::Int(value),
+                ..
+            } => format!("<IntLit value=\"{}\"/>", value),
+            Term::Var { name, span } => format!("<Var name=\"{}\"/>", name),
+            Term::App { callee, args, .. } => {
                 format!(
-                    "<App><Func>{}</Func><Args>{}</Args></App>",
-                    func.print_v1(),
+                    "<App><Func>{:?}</Func><Args>{}</Args></App>",
+                    callee,
                     args.print_v1(),
                 )
             }
-            L1Expr::Func {
+            Term::Func {
                 params,
                 ret_ty,
                 body,
@@ -120,10 +127,10 @@ impl TestPrintV1 for L1Expr {
                     body.print_v1()
                 )
             }
-            L1Expr::Let {
+            Term::Let {
                 name,
                 ty,
-                init: expr,
+                rhs: expr,
                 body,
                 span: _,
             } => {
@@ -135,8 +142,11 @@ impl TestPrintV1 for L1Expr {
                     body.print_v1()
                 )
             }
-            L1Expr::Seq { seq, span } => {
+            Term::Seq { seq, span } => {
                 format!("<Seq>{}</Seq>", seq.print_v1())
+            }
+            Term::Op { op, span } => {
+                format!("<Op op=\"{:?}\"/>", op)
             }
         }
     }
@@ -168,6 +178,26 @@ impl TestPrintV1 for Binding {
     }
 }
 
+impl TestPrintV1 for Type {
+    fn print_v1(self: &Self) -> String {
+        match self {
+            Type::PrimitiveType(primitive_type) => {
+                match primitive_type {
+                    PrimitiveType::Unit => "()".to_string(),
+                    PrimitiveType::Int => "int".to_string(),
+                    PrimitiveType::Bool => "bool".to_string(),
+                }
+            }
+            Type::Function { lhs, rhs } => {
+                format!("(({}) -> {})", lhs.print_v1(), rhs.print_v1())
+            }
+            Type::Variable { name } => {
+                format!("{}", name)
+            }
+        }
+    }
+}
+
 // ==================== Utils ====================
 
 impl<T> TestPrintV1 for Vec<T>
@@ -178,7 +208,7 @@ where
         let mut result = String::new();
         for (i, item) in self.iter().enumerate() {
             let i = i + 1;
-            result.push_str(&format!("<Item{}>{}</Item{}>", i, item.print_v1(), i));
+            result.push_str(&format!("{},", item.print_v1()));
         }
         result
     }

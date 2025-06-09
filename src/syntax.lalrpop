@@ -188,7 +188,6 @@ pub LetStmt: Expr = {
         name: name.to_string(),
         ty: ty,
         init: Box::new(expr),
-        body: (),
         span: (begin, end)
     },
 }

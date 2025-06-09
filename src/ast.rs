@@ -15,6 +15,19 @@ pub enum BinaryOp {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Op {
+    UnaryOp(UnaryOp),
+    BinaryOp(BinaryOp),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Literal {
+    Unit,
+    Int(i32),
+    Bool(bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L0ExprTag;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L1ExprTag;
@@ -66,7 +79,6 @@ pub enum Expr {
         name: String,
         ty: Option<Ty>,
         init: Box<Self>,
-        body: (),
         span: (usize, usize),
     },
     Seq {
@@ -76,26 +88,18 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum L1Expr {
-    UnitLit {
-        span: (usize, usize),
-    },
-    IntLit {
-        value: i32,
-        span: (usize, usize),
-    },
-    BoolLit {
-        value: bool,
+pub enum Term {
+    Literal {
+        value: Literal,
         span: (usize, usize),
     },
     // a var reference
     Var {
-        index: usize,
-        context_depth: usize,
+        name: String,
         span: (usize, usize),
     },
     App {
-        func: Box<Self>,
+        callee: Box<Term>,
         args: Vec<Self>,
         span: (usize, usize),
     },
@@ -108,12 +112,16 @@ pub enum L1Expr {
     Let {
         name: String,
         ty: Option<Ty>,
-        init: Box<Self>,
+        rhs: Box<Self>,
         body: Box<Self>,
         span: (usize, usize),
     },
     Seq {
         seq: Vec<Self>,
+        span: (usize, usize),
+    },
+    Op {
+        op: Op,
         span: (usize, usize),
     },
 }
