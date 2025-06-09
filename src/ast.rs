@@ -1,11 +1,61 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BuiltInOp {
-    Add,
-    Mul,
+pub enum UnaryOp {
+    Pos,
+    Neg,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr {
+pub enum BinaryOp {
+    Add,
+    Mul,
+    // sequencing op ";"
+    Seq,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct L0ExprTag;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct L1ExprTag;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct L2ExprTag;
+
+pub trait GExprTag<
+    Mu, // yeah, the evil μ-type...
+>
+{
+    // this can be either a String or a number
+    type Name;
+    // this is either () or a Box<Mu>
+    type LetBody;
+}
+
+impl<Mu> GExprTag<Mu> for L0ExprTag {
+    type Name = String;
+    type LetBody = ();
+}
+
+impl<Mu> GExprTag<Mu> for L1ExprTag {
+    type Name = String;
+    type LetBody = Box<Mu>;
+}
+
+impl<Mu> GExprTag<Mu> for L2ExprTag {
+    type Name = u32;
+    type LetBody = Box<Mu>;
+}
+
+// named terms (the rawest form of the AST)
+pub type Expr = GExpr<L0ExprTag>;
+
+// after de-sugaring let.
+pub type L1Expr = GExpr<L1ExprTag>;
+
+// after removing names. (unnamed terms)
+pub type L2Expr = GExpr<L2ExprTag>;
+
+// the generic expression type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GExpr<Tag: GExprTag<Self /* here, we plug in μ=Self */>> {
     IntLit {
         value: i32,
         span: (usize, usize),
@@ -14,27 +64,39 @@ pub enum Expr {
         value: bool,
         span: (usize, usize),
     },
+    // a var reference
     Var {
-        name: String,
+        name: Tag::Name,
         span: (usize, usize),
     },
-    Abs {
-        name: String,
-        ty: Ty,
-        body: Box<Expr>,
+    // todo: support for overloading, when args have MUTUALLY EXCLUSIVE types
+    UnaryOp {
+        op: UnaryOp,
+        arg: Box<Self>,
+        span: (usize, usize),
+    },
+    BinaryOp {
+        op: BinaryOp,
+        arg1: Box<Self>,
+        arg2: Box<Self>,
         span: (usize, usize),
     },
     App {
-        func: Box<Expr>,
-        arg: Box<Expr>,
+        func: Box<Self>,
+        args: Vec<Self>,
         span: (usize, usize),
     },
-    // As{func: Box<Expr>, span: (usize, usize)},
-    // todo: generate 'as' on built-in ops to skip having to give typing rules to each built-inop
-    BuiltInOp {
-        op: BuiltInOp,
-        l: Box<Expr>,
-        r: Option<Box<Expr>>,
+    Func {
+        params: Vec<Binding>,
+        ret_ty: Option<Ty>,
+        body: Box<Self>,
+        span: (usize, usize),
+    },
+    Let {
+        name: Tag::Name,
+        ty: Option<Ty>,
+        expr: Box<Self>,
+        body: Tag::LetBody, // () or Box<Self>,
         span: (usize, usize),
     },
 }
@@ -54,61 +116,9 @@ pub enum Ty {
     },
 }
 
-impl Expr {
-    fn map<F: Fn(&Expr) -> Expr>(&self, f: F) -> Expr {
-        match self {
-            Expr::IntLit { .. } => self.clone(),
-            Expr::BoolLit { .. } => self.clone(),
-            Expr::Var { .. } => self.clone(),
-            Expr::Abs {
-                name,
-                ty,
-                body,
-                span,
-            } => Expr::Abs {
-                body: Box::new(f(body)),
-                name: name.clone(),
-                ty: ty.clone(),
-                span: *span,
-            },
-            Expr::App { func, arg, span } => Expr::App {
-                func: Box::new(f(func)),
-                arg: Box::new(f(arg)),
-                span: *span,
-            },
-            Expr::BuiltInOp {
-                op,
-                l,
-                r: Some(r),
-                span,
-            } => Expr::BuiltInOp {
-                op: op.clone(),
-                l: Box::new(f(l)),
-                r: Some(Box::new(f(r))),
-                span: *span,
-            },
-            Expr::BuiltInOp {
-                op,
-                l,
-                r: None,
-                span,
-            } => Expr::BuiltInOp {
-                op: op.clone(),
-                l: Box::new(f(l)),
-                r: None,
-                span: *span,
-            },
-        }
-    }
-
-    fn is_value(&self) -> bool {
-        match self {
-            Expr::IntLit { .. } => true,
-            Expr::BoolLit { .. } => true,
-            Expr::Var { .. } => false,
-            Expr::Abs { .. } => false,
-            Expr::App { .. } => false,
-            Expr::BuiltInOp { .. } => false,
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    pub name: String,
+    pub ty: Option<Ty>,
+    pub span: (usize, usize),
 }

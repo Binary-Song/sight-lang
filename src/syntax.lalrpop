@@ -1,4 +1,4 @@
-use crate::ast::{Expr, Ty, BuiltInOp, };
+use crate::ast::{Expr, Ty, UnaryOp, BinaryOp, Binding};
 use crate::ast;
 
 grammar;
@@ -38,7 +38,8 @@ match {
 } else {
     "true",
     "false",
-    "lam",
+    "fn",
+    "let",
     "bool",
     "int",
     r"\w+" => IDENT,
@@ -47,50 +48,102 @@ match {
 PrimaryExpr: Expr = {
     <begin:@L> <t: IDENT> <end:@R> => Expr::Var{name: String::from(t), span: (begin, end)},
     <begin:@L> <t: INTLIT> <end:@R> => Expr::IntLit{value: t.parse::<i32>().unwrap(), span: (begin, end)},
-    <begin:@L> <t: "true"> <end:@R> => Expr::BoolLit{value: t.parse::<bool>().unwrap(), span: (begin, end)},
-    <begin:@L> <t: "false"> <end:@R> => Expr::BoolLit{value: t.parse::<bool>().unwrap(), span: (begin, end)},
+    <begin:@L> <t: "true"> <end:@R> => Expr::BoolLit{value: true, span: (begin, end)},
+    <begin:@L> <t: "false"> <end:@R> => Expr::BoolLit{value: false, span: (begin, end)},
     "(" <e: Expr> ")" => e,
+    <e:FnExpr> => e,
+    <e:CompoundExpr> => e,
 }
 
-pub Expr: Expr = {
+Param: Binding = {
+    <begin:@L> <name: IDENT> <ty: (":" <Ty>)?> <end:@R> => Binding {
+        name: String::from(name),
+        ty: ty,
+        span: (begin, end)
+    }
+}
+
+FnExpr: Expr = {
+    <begin:@L> "fn" "(" <params: CommaSepList<Param>> ")" <ret_ty: ("->" <Ty>)?> <body:CompoundExpr> <end:@R> => Expr::Func {
+        params: params,
+        ret_ty: ret_ty,
+        body: Box::new(body),
+        span: (begin, end),
+    }
+}
+ 
+
+CompoundExpr: Expr = {
+    <begin:@L> "{" <e: Expr> "}" <end:@R> => e
+}
+
+pub OperatorExpr: Expr = {
     #[precedence(level="0")]
     <e: PrimaryExpr> => e,
 
     #[precedence(level="100")]
-    #[assoc(side="left")]
-    <begin:@L> <func: Expr> <arg: Expr> <end:@R> => Expr::App{
+    <begin:@L> <func: OperatorExpr> "(" <args: CommaSepList<Expr>> ")" <end:@R> => Expr::App{
         func: Box::new(func),
-        arg: Box::new(arg),
+        args: args,
         span: (begin, end)
     },
 
     #[precedence(level="200")]
-    #[assoc(side="left")]
-    <begin:@L> <l: Expr> "*" <r: Expr> <end:@R> => Expr::BuiltInOp{
-        op: BuiltInOp::Mul,
-        l: Box::new(l),
-        r: Some(Box::new(r)),
+    <begin:@L> "+" <arg: OperatorExpr> <end:@R> => Expr::UnaryOp {
+        op: UnaryOp::Pos,
+        arg: Box::new(arg),
+        span: (begin, end)
+    },
+    <begin:@L> "-" <arg: OperatorExpr> <end:@R> => Expr::UnaryOp {
+        op: UnaryOp::Neg,
+        arg: Box::new(arg),
         span: (begin, end)
     },
 
     #[precedence(level="300")]
     #[assoc(side="left")]
-    <begin:@L> <l: Expr> "+" <r: Expr> <end:@R> => Expr::BuiltInOp{
-        op: BuiltInOp::Add,
-        l: Box::new(l),
-        r: Some(Box::new(r)),
+    <begin:@L> <arg1: OperatorExpr> "*" <arg2: OperatorExpr> <end:@R> => Expr::BinaryOp {
+        op: BinaryOp::Mul,
+        arg1: Box::new(arg1),
+        arg2: Box::new(arg2),
         span: (begin, end)
     },
 
     #[precedence(level="400")]
-    #[assoc(side="right")]
-    <begin:@L> "lam" <ident: IDENT> ":" <ty: Ty> "." <body: Expr> <end:@R> => Expr::Abs{
-        name: String::from(ident),
-        ty, 
-        body: Box::new(body),
+    #[assoc(side="left")]
+    <begin:@L> <arg1: OperatorExpr> "+" <arg2: OperatorExpr> <end:@R> => Expr::BinaryOp {
+        op: BinaryOp::Add,
+        arg1: Box::new(arg1),
+        arg2: Box::new(arg2),
         span: (begin, end)
     },
 };
+
+pub LetExpr: Expr = {
+    <begin:@L> "let" <name: IDENT> <ty: (":" <Ty>)?> "=" <expr: OperatorExpr> <end:@R> => Expr::Let {
+        name: name.to_string(),
+        ty: ty,
+        expr: Box::new(expr),
+        body: (),
+        span: (begin, end)
+    },
+    <begin:@L> <e: OperatorExpr> <end:@R> => e,
+
+}
+
+pub SeqExpr: Expr = {
+    <begin:@L> <arg1: LetExpr> ";" <arg2: Expr> <end:@R> => Expr::BinaryOp {
+        op: BinaryOp::Seq,
+        arg1: Box::new(arg1),
+        arg2: Box::new(arg2),
+        span: (begin, end)
+    },
+    <begin:@L> <e: LetExpr> <end:@R> => e,
+}
+
+pub Expr: Expr = {
+    <e:SeqExpr> => e,
+}
 
 PrimaryTy: Ty = {
     <begin:@L> "bool" <end:@R> => Ty::Bool{span: (begin, end)},
@@ -108,3 +161,13 @@ pub Ty: Ty = {
         span: (begin, end)
     }
 }
+
+CommaSepList<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
