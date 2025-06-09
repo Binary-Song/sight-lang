@@ -100,17 +100,6 @@ impl TestPrintV1 for L1Expr {
                 context_depth,
                 ..
             } => format!("<Var index=\"{}\" depth=\"{}\"/>", index, context_depth),
-            L1Expr::UnaryOp { op, arg, .. } => {
-                format!("<UnaryOp op=\"{:?}\">{}</UnaryOp>", op, arg.print_v1())
-            }
-            L1Expr::BinaryOp { op, arg1, arg2, .. } => {
-                format!(
-                    "<BinaryOp op=\"{:?}\"><Arg1>{}</Arg1><Arg2>{}</Arg2></BinaryOp>",
-                    op,
-                    arg1.print_v1(),
-                    arg2.print_v1()
-                )
-            }
             L1Expr::App { func, args, .. } => {
                 format!(
                     "<App><Func>{}</Func><Args>{}</Args></App>",
@@ -146,6 +135,9 @@ impl TestPrintV1 for L1Expr {
                     body.print_v1()
                 )
             }
+            L1Expr::Seq { seq, span } => {
+                format!("<Seq>{}</Seq>", seq.print_v1())
+            }
         }
     }
 }
@@ -169,7 +161,7 @@ impl TestPrintV1 for Ty {
 impl TestPrintV1 for Binding {
     fn print_v1(self: &Binding) -> String {
         format!(
-            "<Binding Name=\"{}\"><Ty>{}</Ty></Binding>",
+            "<Binding><Name>{}</Name><Ty>{}</Ty></Binding>",
             self.name,
             self.ty.print_v1()
         )

@@ -1,6 +1,6 @@
 lalrpop_mod!(pub syntax);
 use crate::ast::*;
-use crate::ast_tools::*;
+use crate::ast_utils::*;
 pub use lalrpop_util::lalrpop_mod;
 use std::collections::vec_deque;
 use std::collections::VecDeque;
@@ -22,37 +22,33 @@ fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
                     return L1Expr::Var { index, span, context_depth: ctx.len() };
                 }
             }
-            panic!("Variable {} at {:?} is unbound.", name, span);
+            panic!("Variable {} at {:?} is unbound. (todo: make this a proper error message)", name, span);
         }
         Expr::UnaryOp { op, arg, span } => L1Expr::UnaryOp {
             op,
             arg: Box::new(l1_desug(*arg, ctx)),
             span,
         },
-        // Desugaring Rule: Linear-Seq to Binary-Seq 
-        // seq(a; b; c) -> seq_op(a, seq_op(b, c))
-        // After this, there will be no more Linear-Seq's in the AST
-        Expr::Seq{seq, span} => {
-            fn seq_to_binary_op(mut seq: Vec<Expr>, span: (usize, usize)) -> Expr {
-                if seq.len() == 0 {
-                    Expr::UnitLit{span}
+        Expr::Seq{seq, span: span_seq} => {
+            let result_exprs = vec![];
+            let seq = VecDeque::from(seq);
+            while let Some(expr) = seq.pop_front() {
+                if let Expr::Let { name, ty, init, body, span: span_let } = expr {
+                    // init-expr CANNOT use the 'let' variable
+                    let init = l1_desug(*init, ctx);
+                    // body CAN use the 'let' variable
+                    ctx.push_front(Binding{name: name.clone(), ty: ty.clone(), span: span_let.clone()});
+                    // body is what is left of the sequence
+                    let body = l1_desug(Expr::Seq { seq: Vec::from(seq), span: (span_let.1, span_seq.1) }, ctx);
+                    result_exprs.push(L1Expr::Let { name: name, ty: ty, init: Box::new(init), body: Box::new(body), span: span_let.clone() });
+                    // no need to continue, we already desugared the rest of the sequence as the body
+                    return L1Expr::Seq { seq: Vec::from(result_exprs) , span: span_seq} ;
+                } else {
+                    let e = l1_desug(expr, ctx.clone());
+                    result_exprs.push(e);
                 }
-                else if seq.len() == 1 {
-                    seq.remove(0)
-                }
-                else {
-                    let first = seq.remove(0);
-                    let rest: Vec<Expr> = seq;
-                    let rest_span = (first.span().1, rest.last().unwrap().span().1);
-                    Expr::BinaryOp {
-                        op: BinaryOp::Seq,
-                        arg1: Box::new(first),
-                        arg2: Box::new(seq_to_binary_op(rest, rest_span)),
-                        span: span,
-                    }
-                }
-            }
-            l1_desug(seq_to_binary_op(seq, span), ctx)
+            };
+            return L1Expr::Seq { seq: Vec::from(result_exprs) , span: span_seq} ;
         }
         Expr::BinaryOp {
             op,
@@ -60,48 +56,7 @@ fn l1_desug(e: Expr, ctx: VecDeque<Binding>) -> L1Expr {
             arg2,
             span,
         } => {
-            // Desugaring Rule: Let-Lifting
-            //
-            //    ;
-            //  /   \
-            // let  X
-            //
-            // becomes
-            //
-            //   let
-            //    |
-            //    X
-            //
-            if let (
-                BinaryOp::Seq,
-                Expr::Let {
-                    name,
-                    ty,
-                    init: expr,
-                    span,
-                    ..
-                },
-            ) = (op.clone(), *arg1.clone())
-            {
-                let mut ctx2 = ctx.clone();
-                ctx2.push_front( Binding{name: name.clone(), ty: ty.clone(), span});
-                L1Expr::Let {
-                    name: name,
-                    ty: ty,
-                    init: Box::new(l1_desug(*expr, ctx)),
-                    body: Box::new(l1_desug(*arg2, ctx2)),
-                    span: span.clone(),
-                }
-            }
-            // the trivial case
-            else {
-                L1Expr::BinaryOp {
-                    op,
-                    arg1: Box::new(l1_desug(*arg1, ctx.clone())),
-                    arg2: Box::new(l1_desug(*arg2, ctx)),
-                    span,
-                }
-            }
+            
         }
         Expr::App { func, args, span } => L1Expr::App {
             func: Box::new(l1_desug(*func, ctx.clone())),
@@ -175,13 +130,4 @@ fn test1() {
     print!("{}\n", r0.clone().print_v1());
     let r1 = l1_desug(r0.clone(), vec_deque::VecDeque::new());
     print!("{}\n", r1.clone().print_v1());
-
-    assert_eq!(
-        r0.print_v1(),
-        r#""#
-    );
-    assert_eq!(
-        r1.print_v1(),
-        r#""#
-    );
 }
