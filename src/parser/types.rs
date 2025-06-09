@@ -55,6 +55,12 @@ impl<'a> Parser<'a> {
         let parsers: &[&dyn Fn(&mut Self) -> Result<TypeExpr, ParseErr>] = &[
             // primitive parser
             &|parser| parser.type_expr_with_max_prec(Prec::Primary.sub_by_one()),
+            // unit parser
+            &|parser| {
+                Ok(TypeExpr::Unit {
+                    span: parser.unit()?,
+                })
+            },
             // parenthesized parser
             &|parser| parser.paren(rule, &|parser| parser.type_expr()),
         ];
@@ -65,8 +71,7 @@ impl<'a> Parser<'a> {
     #[instrument(ret)]
     fn arrow_type_expr(&mut self) -> Result<TypeExpr, ParseErr> {
         let rule = function_name!();
-        let parse_operand =
-            |s: &mut Self| s.type_expr_with_max_prec(Prec::Arrow.sub_by_one());
+        let parse_operand = |s: &mut Self| s.type_expr_with_max_prec(Prec::Arrow.sub_by_one());
         let combine_operands = |lhs: TypeExpr, rhs: TypeExpr, tok| -> TypeExpr {
             let span = (lhs.span().0, rhs.span().1);
             TypeExpr::Arrow {
@@ -82,8 +87,7 @@ impl<'a> Parser<'a> {
     #[instrument(ret)]
     fn tuple_type_expr(&mut self) -> Result<TypeExpr, ParseErr> {
         let rule = function_name!();
-        let parse_operand =
-            |s: &mut Self| s.type_expr_with_max_prec(Prec::Tuple.sub_by_one());
+        let parse_operand = |s: &mut Self| s.type_expr_with_max_prec(Prec::Tuple.sub_by_one());
         let combine_operands = |oprs: Vec<TypeExpr>| -> TypeExpr {
             let span = (
                 oprs.first().unwrap().span().0,

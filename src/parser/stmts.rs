@@ -31,6 +31,7 @@ impl<'a> Parser<'a> {
         let pattern = self.pattern()?;
         let _eq = self.expect(TokenType::Eq, rule)?;
         let rhs = self.expr()?;
+        let _semi = self.expect(TokenType::Semicolon, rule)?;
         let span = (_let.span().0, rhs.span().1);
         Ok(Stmt::Let {
             lhs: pattern,
@@ -45,9 +46,17 @@ impl<'a> Parser<'a> {
         let rule = function_name!();
         let _fn = self.expect(TokenType::Fn, rule)?;
         let name = self.expect(TokenType::Ident, rule)?;
-        let _lparen = self.expect(TokenType::LParen, rule)?;
-        let param_pattern = self.pattern()?;
-        let _rparen = self.expect(TokenType::RParen, rule)?;
+        let _lpran = self.peek();
+        self.trials.push(Trial::SpecificTokenType {
+            token_type: TokenType::LParen,
+            rule_name: rule,
+        });
+        if _lpran.token_type() != TokenType::LParen {
+            return Err(ParseErr::UnexpectedToken { got: _lpran });
+        } else {
+            self.trials.clear();
+        }
+        let param_pattern = self.pattern_with_max_prec(patterns::Prec::Primary)?;
         let _arrow = self.expect(TokenType::Arrow, rule)?;
         let ret_type = self.type_expr()?;
         let body = self.block()?;
@@ -121,8 +130,14 @@ impl<'a> Parser<'a> {
             // do not eat `}`
             return ParseStmtResult::BlockEndedWithExpr(expr);
         } else {
-            self.trials.push(Trial::SpecificTokenType { token_type: TokenType::Semicolon, rule_name: rule });
-            self.trials.push(Trial::SpecificTokenType { token_type: TokenType::RBrace, rule_name: rule });
+            self.trials.push(Trial::SpecificTokenType {
+                token_type: TokenType::Semicolon,
+                rule_name: rule,
+            });
+            self.trials.push(Trial::SpecificTokenType {
+                token_type: TokenType::RBrace,
+                rule_name: rule,
+            });
             return ParseStmtResult::Err(ParseErr::UnexpectedToken { got: next_token });
         }
     }

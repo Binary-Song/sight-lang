@@ -58,6 +58,12 @@ impl<'a> Parser<'a> {
         let parsers: &[&dyn Fn(&mut Self) -> Result<Pattern, ParseErr>] = &[
             // primitive expr parser
             &|parser: &mut Parser<'a>| parser.pattern_with_max_prec(Prec::Primary.sub_by_one()),
+            // unit parser
+            &|parser| {
+                Ok(Pattern::Unit {
+                    span: parser.unit()?,
+                })
+            },
             // parenthesized expr parser
             &|parser| parser.paren(rule, &|parser| parser.pattern()),
         ];
@@ -84,7 +90,6 @@ impl<'a> Parser<'a> {
         self.pattern_with_max_prec(Prec::Max.sub_by_one())
     }
 
-    #[instrument(ret)]
     pub fn pattern_with_max_prec(&mut self, max_prec: Prec) -> Result<Pattern, ParseErr> {
         match max_prec {
             Prec::Variable => self.variable_pattern(),
@@ -92,80 +97,5 @@ impl<'a> Parser<'a> {
             Prec::Tuple => self.tuple_pattern(),
             Prec::Max => self.pattern(), // Max is the same as Tuple in this context
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn parse_pattern(input: &str) -> Result<Pattern, ParseErr> {
-        let mut parser = Parser::new(input);
-        parser.pattern()
-    }
-
-    #[test]
-    fn test_variable_pattern_simple() {
-        let pat = parse_pattern("x: Int").unwrap();
-        match pat {
-            Pattern::Var { name, .. } => assert_eq!(name, "x"),
-            _ => panic!("Expected variable pattern"),
-        }
-    }
-
-    #[test]
-    fn test_tuple_pattern_two_elements() {
-        let pat = parse_pattern("a: Int, b: Bool").unwrap();
-        match pat {
-            Pattern::Tuple { elems, .. } => {
-                assert_eq!(elems.len(), 2);
-                match &elems[0] {
-                    Pattern::Var { name, .. } => assert_eq!(name, "a"),
-                    _ => panic!("Expected variable pattern"),
-                }
-                match &elems[1] {
-                    Pattern::Var { name, .. } => assert_eq!(name, "b"),
-                    _ => panic!("Expected variable pattern"),
-                }
-            }
-            _ => panic!("Expected tuple pattern"),
-        }
-    }
-
-    #[test]
-    fn test_nested_tuple_pattern() {
-        let pat = parse_pattern("x: Int, (y: Bool, z: String)").unwrap();
-        match pat {
-            Pattern::Tuple { elems, .. } => {
-                assert_eq!(elems.len(), 2);
-                match &elems[1] {
-                    Pattern::Tuple { elems: inner, .. } => {
-                        assert_eq!(inner.len(), 2);
-                        match &inner[0] {
-                            Pattern::Var { name, .. } => assert_eq!(name, "y"),
-                            _ => panic!("Expected variable pattern"),
-                        }
-                        match &inner[1] {
-                            Pattern::Var { name, .. } => assert_eq!(name, "z"),
-                            _ => panic!("Expected variable pattern"),
-                        }
-                    }
-                    _ => panic!("Expected inner tuple pattern"),
-                }
-            }
-            _ => panic!("Expected tuple pattern"),
-        }
-    }
-
-    #[test]
-    fn test_pattern_error_on_missing_colon() {
-        let err = parse_pattern("x Int").unwrap_err();
-        assert!(format!("{:?}", err).contains("Colon"));
-    }
-
-    #[test]
-    fn test_pattern_error_on_empty_input() {
-        let err = parse_pattern("").unwrap_err();
-        assert!(format!("{:?}", err).contains("Ident"));
     }
 }

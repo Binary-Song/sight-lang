@@ -26,6 +26,7 @@ impl<'a> Context<'a> {
     fn add_bindings_in_patttern(&self, pat: &TPattern) -> Context {
         fn collect_bindings_in_pattern(pat: &TPattern, bindings: &mut Vec<Binding>) {
             match pat {
+                TPattern::Unit { span } => {}
                 TPattern::Var { name, ty, .. } => {
                     bindings.push(Binding(name.clone(), Bindable::Var(ty.clone())));
                 }
@@ -51,6 +52,7 @@ type TypingResult<T> = Result<T, TypingErr>;
 impl TypeExpr {
     pub fn to_type(&self, ctx: &Context) -> TypingResult<Type> {
         match self {
+            TypeExpr::Unit { .. } => Ok(Type::Unit),
             TypeExpr::Bool { .. } => Ok(Type::Bool),
             TypeExpr::Int { .. } => Ok(Type::Int),
             TypeExpr::Arrow { lhs, rhs, .. } => Ok(Type::Arrow {
@@ -73,6 +75,7 @@ impl TypeExpr {
 impl Pattern {
     fn to_typed(&self, ctx: &Context) -> TypingResult<TPattern> {
         match self {
+            Pattern::Unit { span } => Ok(TPattern::Unit { span: *span }),
             Pattern::Var {
                 name,
                 ty: type_anno,
@@ -297,7 +300,7 @@ fn test_parse(src: &str, expected: &str) {
     // let actual = r.into_tree(&ctx).to_xml(&ctx);
     // let actual = format_xml(actual.as_str()).unwrap();
     // assert_eq!(actual, expected);
-    todo!()
+    
 }
 
 #[test]

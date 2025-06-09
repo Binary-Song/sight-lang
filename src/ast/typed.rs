@@ -24,6 +24,9 @@ pub struct Func {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Pattern {
+    Unit {
+        span: (usize, usize),
+    },
     Var {
         name: String,
         ty: Type,
@@ -73,17 +76,12 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Type {
+    Unit,
     Bool,
     Int,
     Arrow { lhs: Box<Type>, rhs: Box<Type> },
     Tuple { elems: Vec<Type> },
     TypeVar { index: i32 },
-}
-
-impl Type {
-    pub fn new_unit() -> Self {
-        Type::Tuple { elems: vec![] }
-    }
 }
 
 /////////////////////////////////////////
@@ -96,6 +94,7 @@ pub trait Typed {
 impl Typed for Pattern {
     fn get_type(&self) -> Type {
         match self {
+            Pattern::Unit { span } => Type::Unit,
             Pattern::Var { name, ty, span } => ty.clone(),
             Pattern::Tuple { elems, span } => Type::Tuple {
                 elems: elems.iter().map(|e| e.get_type()).collect(),
@@ -137,15 +136,15 @@ impl Typed for Expr {
                 rhs,
                 body,
                 span,
-            } => Type::new_unit(),
+            } => Type::Unit,
             Expr::Seq { seq, span } => match seq.last() {
                 Some(last_expr) => last_expr.get_type(),
-                None => Type::new_unit(),
+                None => Type::Unit,
             },
             Expr::Tuple { elems, span } => Type::Tuple {
                 elems: elems.iter().map(|e| e.get_type()).collect(),
             },
-            Expr::Func { func } => Type::new_unit(),
+            Expr::Func { func } => Type::Unit,
         }
     }
 }

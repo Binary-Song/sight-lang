@@ -105,7 +105,7 @@ pub enum Expr {
 }
 
 /// Blocks are braced Stmts. A Block can double as an Expr
-/// or a Stmt. Like Rust, if a Block ends in an Expr, 
+/// or a Stmt. Like Rust, if a Block ends in an Expr,
 /// the latter will be considered the 'return value' of the Block.
 /// If a Blocks ends in a non-Expr Stmt, a fake unit
 /// Expr will be inserted to the end of the Block which will
@@ -140,6 +140,9 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Pattern {
+    Unit {
+        span: (usize, usize),
+    },
     Var {
         name: String,
         ty: TypeExpr,
@@ -162,6 +165,9 @@ pub struct Func {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum TypeExpr {
+    Unit {
+        span: (usize, usize),
+    },
     Bool {
         span: (usize, usize),
     },

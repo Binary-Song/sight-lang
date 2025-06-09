@@ -26,10 +26,11 @@ impl Span for Expr {
 impl Span for TypeExpr {
     fn span(self: &Self) -> (usize, usize) {
         match self {
-            TypeExpr::Bool { span } => *span,
-            TypeExpr::Int { span } => *span,
-            TypeExpr::Arrow { span, .. } => *span,
-            TypeExpr::Tuple { span, .. } => *span,
+            TypeExpr::Unit { span, .. }
+            | TypeExpr::Bool { span, .. }
+            | TypeExpr::Int { span, .. }
+            | TypeExpr::Arrow { span, .. }
+            | TypeExpr::Tuple { span, .. } => *span,
         }
     }
 }
@@ -51,41 +52,41 @@ impl Span for typed::Expr {
 impl Span for Token {
     fn span(&self) -> (usize, usize) {
         match self {
-            Token::EqEq(span) => *span,
-            Token::NotEq(span) => *span,
-            Token::Le(span) => *span,
-            Token::Ge(span) => *span,
-            Token::AndAnd(span) => *span,
-            Token::OrOr(span) => *span,
-            Token::Arrow(span) => *span,
-            Token::FatArrow(span) => *span,
-            Token::Plus(span) => *span,
-            Token::Minus(span) => *span,
-            Token::Star(span) => *span,
-            Token::Slash(span) => *span,
-            Token::Percent(span) => *span,
-            Token::Not(span) => *span,
-            Token::Assign(span) => *span,
-            Token::Lt(span) => *span,
-            Token::Gt(span) => *span,
-            Token::LParen(span) => *span,
-            Token::RParen(span) => *span,
-            Token::LBrace(span) => *span,
-            Token::RBrace(span) => *span,
-            Token::Comma(span) => *span,
-            Token::Semicolon(span) => *span,
-            Token::Colon(span) => *span,
-            Token::Dot(span) => *span,
-            Token::IntLit(_, span) => *span,
-            Token::True(span) => *span,
-            Token::False(span) => *span,
-            Token::Fn(span) => *span,
-            Token::Let(span) => *span,
-            Token::Bool(span) => *span,
-            Token::Int(span) => *span,
-            Token::Ident(_, span) => *span,
-            Token::BadUtf8Char(_, span) => *span,
-            Token::Eof(span) => *span,
+            Token::EqEq(span)
+            | Token::NotEq(span)
+            | Token::Le(span)
+            | Token::Ge(span)
+            | Token::AndAnd(span)
+            | Token::OrOr(span)
+            | Token::Arrow(span)
+            | Token::FatArrow(span)
+            | Token::Plus(span)
+            | Token::Minus(span)
+            | Token::Star(span)
+            | Token::Slash(span)
+            | Token::Percent(span)
+            | Token::Not(span)
+            | Token::Eq(span)
+            | Token::Lt(span)
+            | Token::Gt(span)
+            | Token::LParen(span)
+            | Token::RParen(span)
+            | Token::LBrace(span)
+            | Token::RBrace(span)
+            | Token::Comma(span)
+            | Token::Semicolon(span)
+            | Token::Colon(span)
+            | Token::Dot(span)
+            | Token::IntLit(_, span)
+            | Token::True(span)
+            | Token::False(span)
+            | Token::Fn(span)
+            | Token::Let(span)
+            | Token::Bool(span)
+            | Token::Int(span)
+            | Token::Ident(_, span)
+            | Token::BadUtf8Char(_, span)
+            | Token::Eof(span) => *span,
         }
     }
 }
@@ -93,7 +94,8 @@ impl Span for Token {
 impl Span for Pattern {
     fn span(self: &Self) -> (usize, usize) {
         match self {
-            Pattern::Var { span, .. } => *span,
+            Pattern::Unit { span } |
+            Pattern::Var { span, .. } |
             Pattern::Tuple { span, .. } => *span,
         }
     }

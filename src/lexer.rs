@@ -15,9 +15,9 @@ pub enum Token {
     Slash((usize, usize)),
     Percent((usize, usize)),
     Not((usize, usize)),
-    Assign((usize, usize)),
     Lt((usize, usize)),
     Gt((usize, usize)),
+    Eq((usize, usize)),
 
     LParen((usize, usize)),
     RParen((usize, usize)),
@@ -59,7 +59,6 @@ pub enum TokenType {
     Slash,
     Percent,
     Not,
-    Assign,
     Lt,
     Gt,
     Eq,
@@ -249,7 +248,7 @@ impl<'a> Lexer<'a> {
             }
             '=' => {
                 self.next_char();
-                Token::Assign((start, self.pos))
+                Token::Eq((start, self.pos))
             }
             '<' => {
                 self.next_char();
@@ -350,7 +349,7 @@ impl Token {
             Token::Slash(_) => TokenType::Slash,
             Token::Percent(_) => TokenType::Percent,
             Token::Not(_) => TokenType::Not,
-            Token::Assign(_) => TokenType::Assign,
+            Token::Eq(_) => TokenType::Eq,
             Token::Lt(_) => TokenType::Lt,
             Token::Gt(_) => TokenType::Gt,
             Token::LParen(_) => TokenType::LParen,
@@ -392,7 +391,6 @@ impl TokenType {
             TokenType::Slash => "Slash",
             TokenType::Percent => "Percent",
             TokenType::Not => "Not",
-            TokenType::Assign => "Assign",
             TokenType::Lt => "Lt",
             TokenType::Gt => "Gt",
             TokenType::Eq => "Eq",
@@ -458,7 +456,7 @@ mod tests {
             Token::Comma((13, 14)),
             Token::Dot((14, 15)),
             Token::Colon((15, 16)),
-            Token::Assign((16, 17)),
+            Token::Eq((16, 17)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -516,7 +514,7 @@ mod tests {
         let expected = vec![
             Token::Let((6, 9)),
             Token::Ident("x".into(), (13, 14)),
-            Token::Assign((15, 16)),
+            Token::Eq((15, 16)),
             Token::IntLit("10".into(), (17, 19)),
         ];
         assert_eq!(tokens, expected);
@@ -529,7 +527,7 @@ mod tests {
         let expected = vec![
             Token::Let((0, 3)),
             Token::Ident("x".into(), (4, 5)),
-            Token::Assign((6, 7)),
+            Token::Eq((6, 7)),
             Token::Ident("a".into(), (8, 9)),
             Token::Plus((10, 11)),
             Token::IntLit("10".into(), (12, 14)),
@@ -547,7 +545,7 @@ mod tests {
         let expected = vec![
             Token::Let((3, 6)),
             Token::Ident("x".into(), (8, 9)),
-            Token::Assign((10, 11)),
+            Token::Eq((10, 11)),
             Token::IntLit("42".into(), (12, 14)),
             Token::Semicolon((14, 15)),
         ];
@@ -563,7 +561,7 @@ mod tests {
             .map(|t| match t {
                 Token::Fn(span)
                 | Token::Ident(_, span)
-                | Token::Assign(span)
+                | Token::Eq(span)
                 | Token::IntLit(_, span)
                 | Token::Semicolon(span) => *span,
                 _ => panic!("unexpected token in test"),
