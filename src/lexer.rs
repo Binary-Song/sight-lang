@@ -84,7 +84,7 @@ pub enum TokenType {
 }
 
 pub struct Lexer<'a> {
-    input: &'a str,
+    pub input: &'a str,
     pub pos: usize,
 }
 

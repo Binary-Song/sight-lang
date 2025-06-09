@@ -26,20 +26,22 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'sight-lang'",
+            "name": "Debug test 'parser::tests::expr::test_parse_expr_func' in 'sight-lang'",
             "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=sight-lang",
-                    "--package=sight-lang"
-                ],
-                "filter": {
-                    "name": "sight-lang",
-                    "kind": "bin"
-                }
+            "args": [
+                "test",
+                "--no-run",
+                "--bin=sight-lang",
+                "--package=sight-lang"
+            ],
+            "filter": {
+                "name": "sight-lang",
+                "kind": "bin"
+            }
             },
-            "args": [],
+            "args": [
+            "parser::tests::expr::test_parse_expr_func"
+            ],
             "cwd": "${workspaceFolder}"
         }
     ]

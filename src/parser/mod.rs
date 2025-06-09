@@ -6,54 +6,128 @@ use crate::span::Span;
 use function_name::named;
 use std::collections::VecDeque;
 use std::vec;
+use std::fmt::Debug;
+mod context;
 mod exprs;
 mod patterns;
 mod stmts;
-mod term;
+#[cfg(test)]
+mod tests;
 mod types;
+mod typing;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Trial {
-    pub token_type: TokenType,
-    pub rule_name: &'static str,
+enum Trial {
+    SpecificTokenType {
+        token_type: TokenType,
+        rule_name: &'static str,
+    },
+    PeekerFunction {
+        description: &'static str,
+        rule_name: &'static str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ParseErr {
-    pub got:  Token ,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Context {
-    pub bindings: Vec<Binding>,
+enum ParseErr {
+    UnexpectedToken { got: Token },
+    UnexpectedTokens { got: Vec<Token> },
 }
 
 struct Parser<'a> {
     pub lexer: Lexer<'a>,
-    allow_block_stack: Vec<bool>,
     trials: Vec<Trial>,
+}
+
+pub enum PeekerResult {
+    /// Stop peeking and consume all previously peeked tokens.
+    Success,
+    /// Stop peeking and do not consume any previously peeked tokens.
+    Fail,
+    /// Continue peeking the next token.
+    Continue,
+}
+
+impl<'a> Debug for Parser<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.lexer.input[self.lexer.pos..])
+    }
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         Parser {
             lexer: Lexer::new(input),
-            allow_block_stack: vec![true],
+            //allow_block_stack: vec![true],
             trials: vec![],
         }
     }
 
-    fn push_allow_blocks(&mut self, value: bool)
+    // fn push_allow_blocks(&mut self, value: bool) {
+    //     self.allow_block_stack.push(value);
+    // }
+
+    // fn pop_allow_blocks(&mut self) {
+    //     self.allow_block_stack.pop();
+    // }
+
+    // fn allow_blocks(&self) -> bool {
+    //     *self
+    //         .allow_block_stack
+    //         .last()
+    //         .expect("Logic error: allow_blocks stack should not be empty")
+    // }
+
+    pub fn peek(&mut self) -> Token
     {
-        self.allow_block_stack.push(value);
+        return self.lexer.peek_token();
     }
 
-    fn pop_allow_blocks(&mut self) {
-        self.allow_block_stack.pop();
+    pub fn consume(&mut self) -> Token
+    {
+        return self.lexer.next_token();
     }
 
-    fn allow_blocks(&self) -> bool {
-        *self.allow_block_stack.last().expect("Logic error: allow_blocks stack should not be empty")
+    pub fn expect_any_with_peeker(
+        &mut self,
+        peeker: &mut impl FnMut(&Token) -> PeekerResult,
+        description: &'static str,
+        rule: &'static str,
+    ) -> Result<Vec<Token>, ParseErr> {
+        let fn_extend_trials = |parser: &mut Self| {
+            parser.trials.push(Trial::PeekerFunction {
+                description,
+                rule_name: rule,
+            })
+        };
+        let fn_clear_trials = |parser: &mut Self| {
+            parser.trials.clear();
+        };
+        // start peeking
+        let saved_pos = self.lexer.pos;
+        let mut tokens = vec![];
+        let consume: bool = loop {
+            let token = self.lexer.next_token();
+            tokens.push(token.clone());
+            let peeker_result: PeekerResult = peeker(&token);
+            match peeker_result {
+                PeekerResult::Success => {
+                    break true;
+                }
+                PeekerResult::Continue => (),
+                PeekerResult::Fail => {
+                    break false;
+                }
+            }
+        };
+        if consume {
+            fn_clear_trials(self);
+            return Ok(tokens);
+        } else {
+            self.lexer.pos = saved_pos;
+            fn_extend_trials(self);
+            return Err(ParseErr::UnexpectedTokens { got: tokens });
+        }
     }
 
     pub fn expect_any(
@@ -65,7 +139,7 @@ impl<'a> Parser<'a> {
             parser.trials.extend(
                 token_types
                     .iter()
-                    .map(|tt| Trial {
+                    .map(|tt| Trial::SpecificTokenType {
                         token_type: tt.clone(),
                         rule_name: rule,
                     })
@@ -82,7 +156,7 @@ impl<'a> Parser<'a> {
             return Ok(token);
         } else {
             fn_extend_trials(self);
-            return Err(ParseErr { got:   token  });
+            return Err(ParseErr::UnexpectedToken { got: token });
         }
     }
 
@@ -117,19 +191,22 @@ impl<'a> Parser<'a> {
         combine_operands: &impl Fn(TRes, TRes, Token) -> TRes,
     ) -> Result<TRes, ParseErr> {
         let lhs = parse_operand(self)?;
-        let op_token = self.expect_any(op_token_types, rule)?;
-        let rhs =
-            self.right_assoc_infix_op(op_token_types, rule, parse_operand, combine_operands)?;
-        Ok(combine_operands(lhs, rhs, op_token))
+        if let Ok(op_token) = self.expect_any(op_token_types, rule) {
+            let rhs =
+                self.right_assoc_infix_op(op_token_types, rule, parse_operand, combine_operands)?;
+            Ok(combine_operands(lhs, rhs, op_token))
+        } else {
+            Ok(lhs)
+        }
     }
 
-    pub fn variadic_op<TOpr, TRes>(
+    pub fn variadic_op<T>(
         &mut self,
         op_token_type: TokenType,
         rule: &'static str,
-        parse_operand: impl Fn(&mut Self) -> Result<TOpr, ParseErr>,
-        combine_operands: impl Fn(Vec<TOpr>) -> TRes,
-    ) -> Result<TRes, ParseErr> {
+        parse_operand: impl Fn(&mut Self) -> Result<T, ParseErr>,
+        combine_operands: impl Fn(Vec<T>) -> T,
+    ) -> Result<T, ParseErr> {
         let mut operands = vec![];
         operands.push(parse_operand(self)?);
         loop {
@@ -138,6 +215,9 @@ impl<'a> Parser<'a> {
             } else {
                 break;
             }
+        }
+        if operands.len() == 1 {
+            return Ok(operands.remove(0));
         }
         Ok(combine_operands(operands))
     }
@@ -162,13 +242,13 @@ impl<'a> Parser<'a> {
             match parse_fn(self) {
                 Ok(res) => return Ok(res),
                 // If the position did not change, it means we simply 'peeked' the next token
-                // and decided this won't work. This is called a 'shallow failure'. 
+                // and decided this won't work. This is called a 'shallow failure'.
                 // In this case, we should try the next parse function.
                 //
                 // If the position did change, it means we had chosen this parse function
                 // and went forward just to find out there was a failure. For example, we
                 // see "(" and say we want to choose the "(" expr ")" rule, just to find out
-                // there was no ")" after that. This is called a 'deep failure'. 
+                // there was no ")" after that. This is called a 'deep failure'.
                 // In this case, we should propagate the error
                 // instead of trying the next parse function.
                 Err(err) => {
@@ -178,7 +258,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Err(ParseErr {
+        Err(ParseErr::UnexpectedToken {
             got: self.lexer.peek_token(),
         })
     }

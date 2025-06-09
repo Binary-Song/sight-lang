@@ -1,6 +1,5 @@
-
 use crate::{
-    ast::{Expr, Term, TypeExpr, Pattern},
+    ast::{typed, Expr, Pattern, Stmt, TypeExpr},
     lexer::Token,
 };
 
@@ -17,11 +16,9 @@ impl Span for Expr {
             | Expr::Var { span, .. }
             | Expr::UnaryOp { span, .. }
             | Expr::BinaryOp { span, .. }
-            | Expr::Seq { span, .. }
             | Expr::App { span, .. }
-            | Expr::Func { span, .. }
-            | Expr::Let { span, .. }
             | Expr::Tuple { span, .. } => *span,
+            Expr::Block(b) => b.span,
         }
     }
 }
@@ -37,17 +34,16 @@ impl Span for TypeExpr {
     }
 }
 
-impl Span for Term {
+impl Span for typed::Expr {
     fn span(self: &Self) -> (usize, usize) {
         match self {
-            Term::Lit { span, .. } => *span,
-            Term::Var { span, .. } => *span,
-            Term::App { span, .. } => *span,
-            Term::Func { span, .. } => *span,
-            Term::Let { span, .. } => *span,
-            Term::Seq { span, .. } => *span,
-            Term::Op { span, .. } => *span,
-            Term::Tuple { span, .. } => *span,
+            typed::Expr::Lit { span, .. }
+            | typed::Expr::Var { span, .. }
+            | typed::Expr::Let { span, .. }
+            | typed::Expr::Seq { span, .. }
+            | typed::Expr::Tuple { span, .. }
+            | typed::Expr::Application { span, .. } => *span,
+            typed::Expr::Func { func, .. } => func.span,
         }
     }
 }
@@ -88,6 +84,8 @@ impl Span for Token {
             Token::Bool(span) => *span,
             Token::Int(span) => *span,
             Token::Ident(_, span) => *span,
+            Token::BadUtf8Char(_, span) => *span,
+            Token::Eof(span) => *span,
         }
     }
 }
@@ -97,6 +95,18 @@ impl Span for Pattern {
         match self {
             Pattern::Var { span, .. } => *span,
             Pattern::Tuple { span, .. } => *span,
+        }
+    }
+}
+
+impl Span for Stmt {
+    fn span(self: &Self) -> (usize, usize) {
+        match self {
+            Stmt::Let { span, .. } => *span,
+            Stmt::Func(func) => func.span,
+            Stmt::Block(block) => block.span,
+            Stmt::Expr { span, .. } => *span,
+            Stmt::Empty { span } => *span,
         }
     }
 }

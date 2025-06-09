@@ -6,14 +6,17 @@ use crate::parser::*;
 use crate::span::Span;
 use function_name::named;
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::vec;
+use tracing::instrument;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ParseStmtResult {
     /// A Stmt was successfully parsed.
     Ok(Stmt),
-    /// A "}" was immediately encountered and consumed. No Stmt parsed.
+    /// A `}` was immediately encountered and consumed. No Stmt parsed.
     BlockEnded,
-    /// An trailing expr was parsed, then "}" was encountered and consumed.
+    /// An trailing expr was parsed, then `}` was encountered and consumed.
     BlockEndedWithExpr(Expr),
     /// A deep or shallow failure.
     Err(ParseErr),
@@ -21,6 +24,7 @@ enum ParseStmtResult {
 
 impl<'a> Parser<'a> {
     #[named]
+    #[instrument(ret)]
     pub fn let_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let rule = function_name!();
         let _let = self.expect(TokenType::Let, rule)?;
@@ -36,6 +40,7 @@ impl<'a> Parser<'a> {
     }
 
     #[named]
+    #[instrument(ret)]
     pub fn fn_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let rule = function_name!();
         let _fn = self.expect(TokenType::Fn, rule)?;
@@ -52,16 +57,17 @@ impl<'a> Parser<'a> {
             panic!("Logic error: expected function name to be an identifier");
         };
         let span = (_fn.span().0, body.span.1);
-        Ok(Stmt::Fn {
+        Ok(Stmt::Func(Rc::new(Func {
             name: name,
-            param_pattern: (param_pattern),
-            return_type: (ret_type),
+            param: param_pattern,
+            ret_ty: ret_type,
             body: Expr::Block(Box::new(body)),
             span: span,
-        })
+        })))
     }
 
     #[named]
+    #[instrument(ret)]
     pub fn empty_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let rule = function_name!();
         let semicolon = self.expect(TokenType::Semicolon, rule)?;
@@ -73,6 +79,7 @@ impl<'a> Parser<'a> {
     /// Parse a statement. We assume this function is only called inside a block. Because we use
     /// the "}" as a signal to end the block.
     #[named]
+    #[instrument(ret)]
     fn stmt(&mut self) -> ParseStmtResult {
         let rule = function_name!();
         let old_pos: usize = self.lexer.pos;
@@ -90,48 +97,50 @@ impl<'a> Parser<'a> {
         if new_pos != old_pos {
             return ParseStmtResult::Err(parse_stmt_result.unwrap_err());
         }
-        // A "shallow fail". Meaning the next token is not a let/fn/"{"/";".
-        // If the next is "}", consume it and return.
-        if let Ok(_rbrace) = self.expect(TokenType::RBrace, rule) {
+        // A "shallow fail". Meaning the next token is not a beginning of a stmt like let, fn, etc.
+        // If the next is "}", return.
+        if TokenType::RBrace == self.peek().token_type() {
             return ParseStmtResult::BlockEnded;
         }
         // Otherwise, we try to parse an expression.
-        self.push_allow_blocks(false);
         let parse_expr_result = self.expr();
-        self.pop_allow_blocks();
         if let Err(err) = parse_expr_result {
             return ParseStmtResult::Err(err);
         }
         let expr = parse_expr_result.unwrap();
-        let next_token = self.expect_any(&[TokenType::Semicolon, TokenType::RBrace], rule);
-        if let Err(err) = next_token {
-            return ParseStmtResult::Err(err);
-        }
-        let next_token = next_token.unwrap();
+        let next_token = self.peek();
         if next_token.token_type() == TokenType::Semicolon {
+            // eat semi
+            self.consume();
             let span: (usize, usize) = (expr.span().0, next_token.span().1);
             return ParseStmtResult::Ok(Stmt::Expr {
                 expr: expr,
                 span: span,
             });
+        } else if next_token.token_type() == TokenType::RBrace {
+            // do not eat `}`
+            return ParseStmtResult::BlockEndedWithExpr(expr);
+        } else {
+            self.trials.push(Trial::SpecificTokenType { token_type: TokenType::Semicolon, rule_name: rule });
+            self.trials.push(Trial::SpecificTokenType { token_type: TokenType::RBrace, rule_name: rule });
+            return ParseStmtResult::Err(ParseErr::UnexpectedToken { got: next_token });
         }
-        assert!(next_token.token_type() == TokenType::RBrace);
-        return ParseStmtResult::BlockEndedWithExpr(expr);
     }
 
-    // "{" -> awaiting stmt -> fn/let/... (exec simple ll1 rules) -> push stmt -> awaiting stmt
+    // `{` -> awaiting stmt -> fn/let/... (exec simple ll1 rules) -> push stmt -> awaiting stmt
     //                       | ";" (exec empty stmt rule) -> push stmt  -> awaiting stmt
     //                       | "{" (exec block rule) -> push stmt -> awaiting stmt
     //                       | "}" (finish block) -> the block has no trailing expr -> return
     //                       | others (exec non-block expr rule) -> ";" -> push stmt -> awaiting stmt
     //                                                            | "}" -> the block has trailing expr -> return
     #[named]
+    #[instrument(ret)]
     pub fn block(&mut self) -> Result<Block, ParseErr> {
-        if !self.allow_blocks() {
-            return Err(ParseErr {
-                got: self.lexer.peek_token(),
-            });
-        }
+        // if !self.allow_blocks() {
+        //     return Err(ParseErr::UnexpectedToken {
+        //         got: self.lexer.peek_token(),
+        //     });
+        // }
         let rule = function_name!();
         let mut stmts = vec![];
         let lbrace = self.expect(TokenType::LBrace, rule)?;
@@ -153,11 +162,22 @@ impl<'a> Parser<'a> {
             }
         };
         let rbrace = self.expect(TokenType::RBrace, rule)?;
+        if let Some(e) = trailing_expr {
+            let span = (lbrace.span().0, rbrace.span().1);
+            stmts.push(Stmt::Expr {
+                expr: e,
+                span: span,
+            });
+        } else {
+            // add a fake unit expr to the block if it has no trailing expr
+            stmts.push(Stmt::Expr {
+                expr: Expr::Unit {
+                    span: rbrace.span(),
+                },
+                span: rbrace.span(),
+            });
+        }
         let span = (lbrace.span().0, rbrace.span().1);
-        return Ok(Block {
-            stmts,
-            trailing_expr,
-            span,
-        });
+        return Ok(Block { stmts, span });
     }
 }

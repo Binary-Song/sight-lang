@@ -171,6 +171,8 @@ mod tuple_impls {
 }
 
 mod generic_impls {
+    use std::rc::Rc;
+
     use super::LiteralValue;
 
     impl<T: LiteralValue> LiteralValue for Vec<T> {
@@ -192,6 +194,12 @@ mod generic_impls {
                 Some(value) => format!("Some({value})", value = value.literal_value()),
                 None => "None".to_string(),
             }
+        }
+    }
+
+    impl<T: LiteralValue> LiteralValue for Rc<T> {
+        fn literal_value(&self) -> String {
+            format!("Rc::new({})", self.as_ref().literal_value())
         }
     }
 }

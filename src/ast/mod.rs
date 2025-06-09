@@ -1,5 +1,6 @@
+pub mod typed;
 use sight_macros::LiteralValue;
-use std::fmt::Debug;
+use std::{fmt::Debug, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum UnaryOp {
@@ -7,6 +8,14 @@ pub enum UnaryOp {
     Neg,
 }
 
+impl UnaryOp {
+    pub fn name(&self) -> String {
+        match self {
+            UnaryOp::Pos => "UnaryOp::Pos `+`".to_string(),
+            UnaryOp::Neg => "UnaryOp::Neg `-`".to_string(),
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum BinaryOp {
     Add,
@@ -17,10 +26,31 @@ pub enum BinaryOp {
     Seq,
 }
 
+impl BinaryOp {
+    pub fn name(&self) -> String {
+        match self {
+            BinaryOp::Add => "BinaryOp::Add `+`".to_string(),
+            BinaryOp::Sub => "BinaryOp::Sub `-`".to_string(),
+            BinaryOp::Mul => "BinaryOp::Mul `*`".to_string(),
+            BinaryOp::Div => "BinaryOp::Div `/`".to_string(),
+            BinaryOp::Seq => "BinaryOp::Seq `;`".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Op {
     UnaryOp(UnaryOp),
     BinaryOp(BinaryOp),
+}
+
+impl Op {
+    pub fn name(&self) -> String {
+        match self {
+            Op::UnaryOp(op) => op.name(),
+            Op::BinaryOp(op) => op.name(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -74,13 +104,22 @@ pub enum Expr {
     Block(Box<Block>),
 }
 
+/// Blocks are braced Stmts. A Block can double as an Expr
+/// or a Stmt. Like Rust, if a Block ends in an Expr, 
+/// the latter will be considered the 'return value' of the Block.
+/// If a Blocks ends in a non-Expr Stmt, a fake unit
+/// Expr will be inserted to the end of the Block which will
+/// function as the return value.
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
-    pub trailing_expr: Option<Expr>,
     pub span: (usize, usize),
 }
 
+/// Stmts are what comprise of Blocks. A Stmt is not an Expr.
+/// We have to introduce the concept of Stmts because
+/// things like `let a = t` and `fn a(){...}` are not
+/// valid Exprs.
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Stmt {
     Let {
@@ -88,23 +127,22 @@ pub enum Stmt {
         rhs: Expr,
         span: (usize, usize),
     },
-    Fn {
-        name: String,
-        param_pattern: Pattern,
-        return_type: TypeExpr,
-        body: Expr,
+    Func(Rc<Func>),
+    Block(Block),
+    Expr {
+        expr: Expr,
         span: (usize, usize),
     },
-    Block(Block),
-    Expr{ expr: Expr, span: (usize, usize)},
-    Empty{ span: (usize, usize)},
+    Empty {
+        span: (usize, usize),
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Pattern {
     Var {
         name: String,
-        type_anno: TypeExpr,
+        ty: TypeExpr,
         span: (usize, usize),
     },
     Tuple {
@@ -114,46 +152,12 @@ pub enum Pattern {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum Term {
-    Lit {
-        value: Lit,
-        span: (usize, usize),
-    },
-    // a var reference
-    Var {
-        name: String,
-        span: (usize, usize),
-    },
-    App {
-        callee: Box<Term>,
-        arg: Box<Term>,
-        span: (usize, usize),
-    },
-    Func {
-        param: Box<Binding>,
-        ret_ty: Option<TypeExpr>,
-        body: Box<Self>,
-        span: (usize, usize),
-    },
-    Let {
-        name: String,
-        ty: Option<TypeExpr>,
-        rhs: Box<Self>,
-        body: Box<Self>,
-        span: (usize, usize),
-    },
-    Seq {
-        seq: Vec<Self>,
-        span: (usize, usize),
-    },
-    Op {
-        op: Op,
-        span: (usize, usize),
-    },
-    Tuple {
-        elems: Vec<Self>,
-        span: (usize, usize),
-    },
+pub struct Func {
+    pub name: String,
+    pub param: Pattern,
+    pub ret_ty: TypeExpr,
+    pub body: Expr,
+    pub span: (usize, usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -173,11 +177,4 @@ pub enum TypeExpr {
         elems: Vec<TypeExpr>,
         span: (usize, usize),
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct Binding {
-    pub name: String,
-    pub ty: Option<TypeExpr>,
-    pub span: (usize, usize),
 }
