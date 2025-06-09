@@ -1,0 +1,199 @@
+use crate::ast::TokenKind;
+use crate::ast::Expr;
+use crate::ast;
+
+grammar;
+
+match {
+    // length-2 ops
+    "==" => PAT_EQEQ,
+    "!=" => PAT_NE,
+    "<" => PAT_LT,
+    "<=" => PAT_LE,
+    ">" => PAT_GT,
+    ">=" => PAT_GE,
+    "&&" => PAT_AMPAMP,
+    "||" => PAT_PIPEPIPE,
+    "->" => PAT_ARROW,
+} else {
+    // operators
+    "+" => PAT_PLUS,
+    "-" => PAT_MINUS,
+    "*" => PAT_STAR,
+    "/" => PAT_SLASH,
+    "%" => PAT_PERCENT,
+    "!" => PAT_EXCLAM,
+    "=" => PAT_EQ,
+    // brackets
+    "(" => PAT_LPAREN,
+    ")" => PAT_RPAREN,
+    "{" => PAT_LBRACE,
+    "}" => PAT_RBRACE,
+    // separators
+    "," => PAT_COMMA,
+    ";" => PAT_SEMICOLON,
+    "." => PAT_DOT,
+} else {
+    r"\d+" => PAT_INTLIT,
+} else {
+    r"\w+" => PAT_IDENT,
+}
+EQEQ: ast::Token = {
+    <start: @L> <s: PAT_EQEQ> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::EQEQ,
+    },
+}
+NE: ast::Token = {
+    <start: @L> <s: PAT_NE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::NE,
+    },
+}
+LT: ast::Token = {
+    <start: @L> <s: PAT_LT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::LT,
+    },
+}
+LE: ast::Token = {
+    <start: @L> <s: PAT_LE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::LE,
+    },
+}
+GT: ast::Token = {
+    <start: @L> <s: PAT_GT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::GT,
+    },
+}
+GE: ast::Token = {
+    <start: @L> <s: PAT_GE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::GE,
+    },
+}
+AMPAMP: ast::Token = {
+    <start: @L> <s: PAT_AMPAMP> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::AMPAMP,
+    },
+}
+PIPEPIPE: ast::Token = {
+    <start: @L> <s: PAT_PIPEPIPE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::PIPEPIPE,
+    },
+}
+ARROW: ast::Token = {
+    <start: @L> <s: PAT_ARROW> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::ARROW,
+    },
+}
+PLUS: ast::Token = {
+    <start: @L> <s: PAT_PLUS> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::PLUS,
+    },
+}
+MINUS: ast::Token = {
+    <start: @L> <s: PAT_MINUS> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::MINUS,
+    },
+}
+STAR: ast::Token = {
+    <start: @L> <s: PAT_STAR> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::STAR,
+    },
+}
+SLASH: ast::Token = {
+    <start: @L> <s: PAT_SLASH> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::SLASH,
+    },
+}
+PERCENT: ast::Token = {
+    <start: @L> <s: PAT_PERCENT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::PERCENT,
+    },
+}
+EXCLAM: ast::Token = {
+    <start: @L> <s: PAT_EXCLAM> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::EXCLAM,
+    },
+}
+EQ: ast::Token = {
+    <start: @L> <s: PAT_EQ> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::EQ,
+    },
+}
+LPAREN: ast::Token = {
+    <start: @L> <s: PAT_LPAREN> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::LPAREN,
+    },
+}
+RPAREN: ast::Token = {
+    <start: @L> <s: PAT_RPAREN> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::RPAREN,
+    },
+}
+LBRACE: ast::Token = {
+    <start: @L> <s: PAT_LBRACE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::LBRACE,
+    },
+}
+RBRACE: ast::Token = {
+    <start: @L> <s: PAT_RBRACE> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::RBRACE,
+    },
+}
+COMMA: ast::Token = {
+    <start: @L> <s: PAT_COMMA> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::COMMA,
+    },
+}
+SEMICOLON: ast::Token = {
+    <start: @L> <s: PAT_SEMICOLON> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::SEMICOLON,
+    },
+}
+DOT: ast::Token = {
+    <start: @L> <s: PAT_DOT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::DOT,
+    },
+}
+IDENT: ast::Token = {
+    <start: @L> <s: PAT_IDENT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::IDENT,
+    },
+}
+INTLIT: ast::Token = {
+    <start: @L> <s: PAT_INTLIT> <end: @R> => ast::Token {
+        span: (start, end),
+        kind: TokenKind::INTLIT,
+    },
+}
+pub Expr: Expr = {
+    #[precedence(level="0")]
+    <t: IDENT> => Expr::Var(t),
+    <t: INTLIT> => Expr::IntLit(t),
+    #[precedence(level="1")] #[assoc(side="left")]
+    <l:Expr> <t:STAR> <r:Expr> => Expr::Binary(t, Box::new(l), Box::new(r)),
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> <t:PLUS> <r:Expr> => Expr::Binary(t, Box::new(l), Box::new(r)),
+};
