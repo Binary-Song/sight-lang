@@ -1,3 +1,4 @@
+use std::fmt::format;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -140,54 +141,71 @@ PrimaryExpr_{suffix}: Expr = {
         })
 }
 
+fn prefix_op(token: &str, big_camel_name: &str, precedence: i32, suffix: &str) -> String {
+    format!(
+        r##"
+        #[precedence(level="{precedence}")]
+        <begin:@L> <op_begin:@L> "{token}" <op_end:@R> <arg: OperatorExpr_{suffix}> <end:@R> => Expr::UnaryOp {{
+            op: UnaryOp::{big_camel_name},
+            arg: Box::new(arg),
+            span: (begin, end),
+            op_span: (op_begin, op_end),
+        }},
+        "##
+    )
+}
+
+fn binary_op(
+    token: &str,
+    big_camel_name: &str,
+    precedence: i32,
+    assoc: &str,
+    suffix: &str,
+) -> String {
+    format!(
+        r##"
+    #[precedence(level="{precedence}")]
+    #[assoc(side="{assoc}")]
+    <begin:@L> <lhs: OperatorExpr_{suffix}> <op_begin:@L> "{token}" <op_end:@R> <rhs: OperatorExpr_{suffix}> <end:@R> => Expr::BinaryOp {{
+        op: BinaryOp::{big_camel_name},
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+        span: (begin, end),
+        op_span: (op_begin, op_end),
+    }},
+        "##
+    )
+}
+
 fn operator_expr(allow_block: bool) -> String {
-    r##"
-pub OperatorExpr_{suffix}: Expr = {
-    #[precedence(level="0")]
-    <e: PrimaryExpr_{suffix}> => e,
-
-    #[precedence(level="100")]
-    <begin:@L> <func: OperatorExpr_{suffix}> "(" <args: CommaSepList<Expr>> ")" <end:@R> => Expr::App{
-        func: Box::new(func),
-        args: args,
-        span: (begin, end)
-    },
-
-    #[precedence(level="200")]
-    <begin:@L> "+" <arg: OperatorExpr_{suffix}> <end:@R> => Expr::UnaryOp {
-        op: UnaryOp::Pos,
-        arg: Box::new(arg),
-        span: (begin, end)
-    },
-    <begin:@L> "-" <arg: OperatorExpr_{suffix}> <end:@R> => Expr::UnaryOp {
-        op: UnaryOp::Neg,
-        arg: Box::new(arg),
-        span: (begin, end)
-    },
-
-    #[precedence(level="300")]
-    #[assoc(side="left")]
-    <begin:@L> <arg1: OperatorExpr_{suffix}> "*" <arg2: OperatorExpr_{suffix}> <end:@R> => Expr::BinaryOp {
-        op: BinaryOp::Mul,
-        arg1: Box::new(arg1),
-        arg2: Box::new(arg2),
-        span: (begin, end)
-    },
-
-    #[precedence(level="400")]
-    #[assoc(side="left")]
-    <begin:@L> <arg1: OperatorExpr_{suffix}> "+" <arg2: OperatorExpr_{suffix}> <end:@R> => Expr::BinaryOp {
-        op: BinaryOp::Add,
-        arg1: Box::new(arg1),
-        arg2: Box::new(arg2),
-        span: (begin, end)
-    },
-};
-"##.replace("{suffix}", if allow_block {
+    let suffix = if allow_block {
             allow_blocks_suffix
         } else {
             no_blocks_suffix
-        })
+        };
+    let pos = prefix_op("+", "Pos", 200, suffix);
+    let neg = prefix_op("-", "Neg", 200, suffix);
+    let mul = binary_op("*", "Mul", 300, "left", suffix);
+    let add = binary_op("+", "Add", 400, "left", suffix);
+    format!(
+r##"
+    pub OperatorExpr_{suffix}: Expr = {{
+        #[precedence(level="0")]
+        <e: PrimaryExpr_{suffix}> => e,
+
+        #[precedence(level="100")]
+        <begin:@L> <func: OperatorExpr_{suffix}> "(" <args: CommaSepList<Expr>> ")" <end:@R> => Expr::App{{
+            func: Box::new(func),
+            args: args,
+            span: (begin, end)
+        }},
+        {pos}
+        {neg}
+        {mul}
+        {add}
+    }};
+"##
+    ) 
 }
 
 fn let_stmt() -> String {
@@ -196,7 +214,7 @@ pub LetStmt: Expr = {
     <begin:@L> "let" <name: IDENT> <ty: (":" <Ty>)?> "=" <expr: OperatorExpr_AllowBlocks> ";" <end:@R> => Expr::Let {
         name: name.to_string(),
         ty: ty,
-        init: Box::new(expr),
+        rhs: Box::new(expr),
         span: (begin, end)
     },
 }

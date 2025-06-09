@@ -1,5 +1,5 @@
 mod ast;
-mod utils;
+mod compat_serialize;
 mod parser;
 mod typing;
 
