@@ -8,15 +8,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'dough-lang'",
+            "name": "Debug executable 'sight-lang'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=dough-lang",
-                    "--package=dough-lang"
+                    "--bin=sight-lang",
+                    "--package=sight-lang"
                 ],
                 "filter": {
-                    "name": "dough-lang",
+                    "name": "sight-lang",
                     "kind": "bin"
                 }
             },
@@ -26,16 +26,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'dough-lang'",
+            "name": "Debug unit tests in executable 'sight-lang'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=dough-lang",
-                    "--package=dough-lang"
+                    "--bin=sight-lang",
+                    "--package=sight-lang"
                 ],
                 "filter": {
-                    "name": "dough-lang",
+                    "name": "sight-lang",
                     "kind": "bin"
                 }
             },

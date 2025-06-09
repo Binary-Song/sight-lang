@@ -175,27 +175,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dough-lang"
-version = "0.1.0"
-dependencies = [
- "colog",
- "dough-utils",
- "lalrpop",
- "lalrpop-util",
- "log",
- "pretty_assertions",
- "regex",
- "xml-rs",
-]
-
-[[package]]
-name = "dough-utils"
-version = "0.1.0"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -590,6 +569,27 @@ checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest",
  "keccak",
+]
+
+[[package]]
+name = "sight-lang"
+version = "0.1.0"
+dependencies = [
+ "colog",
+ "lalrpop",
+ "lalrpop-util",
+ "log",
+ "pretty_assertions",
+ "regex",
+ "sight-utils",
+ "xml-rs",
+]
+
+[[package]]
+name = "sight-utils"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]

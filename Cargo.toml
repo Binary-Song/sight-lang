@@ -1,5 +1,5 @@
 [package]
-name = "dough-lang"
+name = "sight-lang"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,8 +12,16 @@ colog = "1.3.0"
 [build-dependencies]
 lalrpop = "0.22.1"
 regex = "1.10"
-dough-utils = { path = "dough-utils" }
+sight-utils = { path = "sight-utils" }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 xml-rs = "0.8.26"
+
+[lib]
+name = "sight_lang"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sight_lang_compiler"
+path = "src/main.rs"
