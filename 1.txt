@@ -1,0 +1,417 @@
+   Compiling dough-lang v0.1.0 (D:\dough-lang)
+error: failed to run custom build command for `dough-lang v0.1.0 (D:\dough-lang)`
+
+Caused by:
+  process didn't exit successfully: `D:\dough-lang\target\debug\build\dough-lang-1911c62e4ab99078\build-script-build` (exit code: 101)
+  --- stdout
+  processing file `D:\dough-lang\src\syntax.lalrpop`
+  D:\dough-lang\src\syntax.lalrpop:55:5: 55:25: Local ambiguity detected
+
+    The problem arises after having observed the following symbols in the input:
+      CompoundExpr
+    At that point, if the next token is a `"("`, then the parser can proceed in
+    two different ways.
+
+    First, the parser could execute the production at
+    D:\dough-lang\src\syntax.lalrpop:55:5: 55:25, which would consume the top 1
+    token(s) from the stack and produce a `PrimaryExpr`. This might then yield a
+    parse tree like
+      CompoundExpr      ╷ "(" CommaSepList<Expr> ")"
+      ├─PrimaryExpr─────┤                          │
+      ├─OperatorExpr0───┤                          │
+      ├─OperatorExpr100─┘                          │
+      └─OperatorExpr100────────────────────────────┘
+
+    Alternatively, the parser could execute the production at
+    D:\dough-lang\src\syntax.lalrpop:136:5: 136:46, which would consume the top 1
+    token(s) from the stack and produce a `Stmt`. This might then yield a parse
+    tree like
+      CompoundExpr╷ Stmt
+      ├─Stmt──────┤    │
+      ├─(<Stmt>)+─┘    │
+      └─(<Stmt>)+──────┘
+
+    See the LALRPOP manual for advice on making your grammar LR(1).
+
+  D:\dough-lang\src\syntax.lalrpop:55:5: 55:25: Local ambiguity detected
+
+    The problem arises after having observed the following symbols in the input:
+      CompoundExpr
+    At that point, if the next token is a `"+"`, then the parser can proceed in
+    two different ways.
+
+    First, the parser could execute the production at
+    D:\dough-lang\src\syntax.lalrpop:55:5: 55:25, which would consume the top 1
+    token(s) from the stack and produce a `PrimaryExpr`. This might then yield a
+    parse tree like
+      CompoundExpr      ╷ "+" OperatorExpr300
+      ├─PrimaryExpr─────┤                   │
+      ├─OperatorExpr0───┤                   │
+      ├─OperatorExpr100─┤                   │
+      ├─OperatorExpr200─┤                   │
+      ├─OperatorExpr300─┤                   │
+      ├─OperatorExpr────┘                   │
+      └─OperatorExpr────────────────────────┘
+
+    Alternatively, the parser could execute the production at
+    D:\dough-lang\src\syntax.lalrpop:136:5: 136:46, which would consume the top 1
+    token(s) from the stack and produce a `Stmt`. This might then yield a parse
+    tree like
+      CompoundExpr╷ Stmt
+      ├─Stmt──────┤    │
+      ├─(<Stmt>)+─┘    │
+      └─(<Stmt>)+──────┘
+
+    See the LALRPOP manual for advice on making your grammar LR(1).
+
+  D:\dough-lang\src\syntax.lalrpop:116:5: 121:5: Conflict detected
+
+      when in this state:
+    OperatorExpr = OperatorExpr "+" OperatorExpr300 (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = OperatorExpr300 (*) "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"*"` we can reduce to a `OperatorExpr` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"("` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"+"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"-"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"false"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"fn"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"true"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"{"` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `IDENT` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ (*) Expr "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ (*) Expr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" (<Stmt>)+ "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CompoundExpr = (*) "{" "}" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Expr = (*) OperatorExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    FnExpr = (*) "fn" "(" CommaSepList<Param> ")" "->" Ty CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr "+" OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr = (*) OperatorExpr300 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr0 = (*) PrimaryExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr0 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr100 = (*) OperatorExpr100 "(" CommaSepList<Expr> ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) OperatorExpr100 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "+" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr200 = (*) "-" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    OperatorExpr300 = (*) OperatorExpr300 "*" OperatorExpr200 [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) CompoundExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) FnExpr [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "(" Expr ")" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "false" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) "true" [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    PrimaryExpr = (*) INTLIT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `INTLIT` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = Expr (*) "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = Expr (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `","` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:67:34: 67:52: Conflict detected
+
+      when in this state:
+    (<Param> ",")+ = (<Param> ",")+ (*) Param "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Param> = (<Param> ",")+ (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Param> = (<Param> ",")+ (*) Param [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Param = (*) IDENT [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Param = (*) IDENT ":" Ty [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `IDENT` we can reduce to a `CommaSepList<Param>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:67:34: 67:52: Conflict detected
+
+      when in this state:
+    (<Param> ",")+ = Param (*) "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Param> = Param (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `","` we can reduce to a `CommaSepList<Param>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:59:5: 64:0: Conflict detected
+
+      when in this state:
+    Param = IDENT (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Param = IDENT (*) ":" Ty [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `":"` we can reduce to a `Param` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:87:48: 87:65: Conflict detected
+
+      when in this state:
+    (<Expr> ",")+ = (<Expr> ",")+ Expr (*) "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Expr> = (<Expr> ",")+ Expr (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `","` we can reduce to a `CommaSepList<Expr>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:67:34: 67:52: Conflict detected
+
+      when in this state:
+    (<Param> ",")+ = (<Param> ",")+ Param (*) "," [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    CommaSepList<Param> = (<Param> ",")+ Param (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `","` we can reduce to a `CommaSepList<Param>` but we can also shift
+
+  D:\dough-lang\src\syntax.lalrpop:150:5: 150:6: Conflict detected
+
+      when in this state:
+    Ty = Ty0 (*) [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+    Ty = Ty0 (*) "->" Ty [IDENT, "bool", "false", "fn", "int", "let", "true", INTLIT, "!", "%", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "{", "}", "!=", "&&", "->", "<=", "==", ">=", "||", Eof]
+
+    and looking at a token `"->"` we can reduce to a `Ty` but we can also shift
+
+
+  --- stderr
+  thread 'main' panicked at build.rs:2:29:
+  called `Result::unwrap()` on an `Err` value: Kind(InvalidData)
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
