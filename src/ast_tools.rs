@@ -71,7 +71,7 @@ impl TestPrintV1 for Expr {
             Expr::Let {
                 name,
                 ty,
-                expr,
+                init: expr,
                 body,
                 span,
             } => {
@@ -130,7 +130,7 @@ impl TestPrintV1 for L1Expr {
             L1Expr::Let {
                 name,
                 ty,
-                expr,
+                init: expr,
                 body,
                 span: _,
             } => {

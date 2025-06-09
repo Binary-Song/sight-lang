@@ -187,7 +187,7 @@ pub LetStmt: Expr = {
     <begin:@L> "let" <name: IDENT> <ty: (":" <Ty>)?> "=" <expr: OperatorExpr> ";" <end:@R> => Expr::Let {
         name: name.to_string(),
         ty: ty,
-        expr: Box::new(expr),
+        init: Box::new(expr),
         body: (),
         span: (begin, end)
     },

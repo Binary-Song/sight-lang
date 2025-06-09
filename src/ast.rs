@@ -65,7 +65,7 @@ pub enum Expr {
     Let {
         name: String,
         ty: Option<Ty>,
-        expr: Box<Self>,
+        init: Box<Self>,
         body: (),
         span: (usize, usize),
     },
@@ -120,7 +120,7 @@ pub enum L1Expr {
     Let {
         name: String,
         ty: Option<Ty>,
-        expr: Box<Self>,
+        init: Box<Self>,
         body: Box<Self>,
         span: (usize, usize),
     },
