@@ -213,7 +213,7 @@ impl IntoTreeWithContext for PrimitiveType {
         }
     }
 }
-trait Span {
+pub trait Span {
     fn span(self: &Self) -> (usize, usize);
 }
 
