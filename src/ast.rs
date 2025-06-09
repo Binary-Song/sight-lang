@@ -21,24 +21,6 @@ pub struct L1ExprTag;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct L2ExprTag;
 
-// impl<Mu> GExprTag<Mu> for L0ExprTag {
-//     type Name = String;
-//     type LetBody =  ;
-//     type SeqBody = (Vec<Mu>, (usize, usize));
-// }
-
-// impl<Mu> GExprTag<Mu> for L1ExprTag {
-//     type Name = String;
-//     type LetBody = Box<Mu>; // let expr should now have a body
-//     type SeqBody = (); // tuck the linear sequence into a binary op tree (to make it easier to deal with)
-// }
-
-// impl<Mu> GExprTag<Mu> for L2ExprTag {
-//     type Name = u32; // use index to represent variables (de Bruijn indices)
-//     type LetBody = Box<Mu>;
-//     type SeqBody = ();
-// }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     UnitLit {
@@ -142,8 +124,6 @@ pub enum L1Expr {
         body: Box<Self>,
         span: (usize, usize),
     },
-    // Linear-Seq
-    Seq,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
