@@ -5,6 +5,9 @@ edition = "2021"
 
 [build-dependencies]
 lalrpop = "0.22.1"
+regex = "1.10"
+dough-utils = { path = "dough-utils" }
 
 [dependencies]
-lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
+lalrpop-util = { version = "0.22.1", features = ["lexer", "unicode"] }
+regex = "1.10"

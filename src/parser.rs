@@ -1,4 +1,4 @@
-lalrpop_mod!(pub syntax);
+lalrpop_mod!(pub syntax, "/syntax.rs");
 use crate::ast::*;
 use crate::utils::*;
 pub use lalrpop_util::lalrpop_mod;
@@ -110,3 +110,4 @@ fn test1() {
     .unwrap();
     print!("L1: \n{}\n", r0.clone().print_v1());
 }
+
