@@ -1,13 +1,15 @@
+use crate::ast::*;
 use crate::{
     ast::{Lit, Term, Ty},
     compat_serialize::IntoTreeWithContext,
 };
+use log::debug;
 use std::{
     arch::x86_64,
     collections::{HashMap, HashSet, VecDeque},
     fmt::{format, Debug},
 };
-use crate::ast::*;
+const log_enabled: bool = false;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
@@ -185,7 +187,9 @@ fn type_term(term: Term) -> Option<Type> {
     let mut context = Context::empty();
     let ty = type_of(term, &mut context);
     let constraints = unify(context.constraints.into_iter().collect())?;
+    debug!("raw type = {ty}", ty = ty.dbg_print_root());
     let ty = apply_solution(ty, &constraints);
+    debug!("final type: {ty}", ty = ty.dbg_print_root());
     return Some(ty);
 }
 
@@ -218,19 +222,13 @@ fn replace_constraints(
     result
 }
 
-/// Given replacements σ and γ, calculate the composite replacement σ ∘ γ
-/// where σ is given by `sigma`, and γ is given by {`gamma_src` -> `gamma_dst`}
-fn compose_replacements(
+/// Given substitutions σ and γ, calculate the composite substitution σ ∘ γ
+/// where σ is given by `sigma`, and γ is {`gamma_src` -> `gamma_dst`}
+fn compose_substitutions(
     sigma: HashSet<(Type, Type)>,
     gamma_src: Type,
     gamma_dst: Type,
 ) -> HashSet<(Type, Type)> {
-    // print!(
-    //     "compose_replacements: sigma = {}, gamma src = {}, dst = {}\n",
-    //     sigma.to_tree_v1(),
-    //     gamma_src.to_tree_v1(),
-    //     gamma_dst.to_tree_v1()
-    // );
     let mut res: HashSet<(Type, Type)> = sigma
         .iter()
         .map(|(src, dst)| {
@@ -247,99 +245,206 @@ fn compose_replacements(
     if res.iter().find(|(a, b)| a == &gamma_src).is_none() {
         res.insert((gamma_src.clone(), gamma_dst.clone()));
     }
-    // print!("compose_replacements result: {}\n", res.to_tree_v1());
     res
 }
 
-fn unify(mut C: HashSet<(Type, Type)>) -> Option<HashSet<(Type, Type)>> {
-    static mut lvl: i32 = 0;
-
-    fn unify_impl(mut C: HashSet<(Type, Type)>) -> Option<HashSet<(Type, Type)>> {
-        if let Some(con) = C.iter().next().cloned() {
-            C.remove(&con);
-            let (lhs, rhs) = con;
-            if lhs == rhs {
-                return unify(C);
-            } else {
-                match (lhs, rhs) {
-                    (X @ Type::Var { .. }, T) | (T, X @ Type::Var { .. })
-                        if !fv(&T).contains(&X) =>
-                    {
-                        let mut C = unify(replace_constraints(C, &X, &T))?;
-                        Some(compose_replacements(C, X, T))
-                    }
-                    (
-                        Type::Func {
-                            lhs: S_lhs,
-                            rhs: S_rhs,
-                        },
-                        Type::Func {
-                            lhs: T_lhs,
-                            rhs: T_rhs,
-                        },
-                    ) if S_lhs.len() == T_lhs.len() => {
-                        S_lhs.iter().zip(T_lhs.iter()).for_each(|(s, t)| {
-                            C.insert((s.clone(), t.clone()));
-                        });
-                        C.insert((*S_rhs, *T_rhs));
-                        return unify(C);
-                    }
-                    _ => None,
-                }
-            }
-        } else {
+fn unify_with_rec(c: HashSet<(Type, Type)>, recursion: i32) -> Option<HashSet<(Type, Type)>> {
+    fn unify_with_rec_impl(
+        mut c: HashSet<(Type, Type)>,
+        recursion: i32,
+    ) -> Option<HashSet<(Type, Type)>> {
+        let first = c.iter().next().cloned();
+        if first.is_none() {
             return Some(HashSet::new());
         }
+        let first = first.unwrap();
+        c.remove(&first);
+        let (lhs, rhs) = first;
+        if lhs == rhs {
+            return unify_with_rec(c, recursion + 1);
+        }
+        match (lhs, rhs) {
+            (x @ Type::Var { .. }, t) | (t, x @ Type::Var { .. }) if !fv(&t).contains(&x) => {
+                let c = replace_constraints(c, &x, &t);
+                let c = unify_with_rec(c, recursion + 1)?;
+                // ?? Subst != Constr !!!
+                let c = compose_substitutions(c, x, t);
+                Some(c)
+            }
+            (
+                Type::Func {
+                    lhs: s_lhs,
+                    rhs: s_rhs,
+                },
+                Type::Func {
+                    lhs: t_lhs,
+                    rhs: t_rhs,
+                },
+            ) if s_lhs.len() == t_lhs.len() => {
+                s_lhs.iter().zip(t_lhs.iter()).for_each(|(s, t)| {
+                    c.insert((s.clone(), t.clone()));
+                });
+                c.insert((*s_rhs, *t_rhs));
+                return unify_with_rec(c, recursion + 1);
+            }
+            _ => None,
+        }
     }
-    unsafe {
-        lvl += 1;
-    }
-    // print!("[{}] unifying: {}\n", unsafe { lvl }, C.to_tree_v1());
-    let res: Option<HashSet<(Type, Type)>> = unify_impl(C);
-    // print!("[{}] unify result: {}\n", unsafe { lvl }, res.to_tree_v1());
-    unsafe {
-        lvl -= 1;
-    }
+    log::debug!(
+        "[{recursion}]{spaces} unifying {tree}",
+        tree = c.dbg_print_root(),
+        spaces = " ".repeat(recursion as usize)
+    );
+    let result = unify_with_rec_impl(c, recursion);
+    log::debug!(
+        "[{recursion}]{spaces} unify result {result}",
+        spaces = " ".repeat(recursion as usize),
+        result = result.dbg_print_root()
+    );
+    result
+}
+
+fn unify(c: HashSet<(Type, Type)>) -> Option<HashSet<(Type, Type)>> {
+    log::debug!("unify starts");
+    let res = unify_with_rec(c, 1);
+    log::debug!("unify final result: {res}", res = res.dbg_print_root());
     return res;
 }
 
-// impl ToTree for Context {
-//     fn to_tree_v1(self: &Self) -> String {
-//         let mut string = String::new();
-//         for (lhs, rhs) in self.constraints.iter() {
-//             string += &format!("    {} = {}\n", lhs.to_tree_v1(), rhs.to_tree_v1());
-//         }
-//         format!("Constr (\n{})", string)
-//     }
-// }
+struct DebugPrintContext {
+    parent_precedence: i32,
+}
 
-// impl ToTree for HashSet<(Type, Type)> {
-//     fn to_tree_v1(self: &Self) -> String {
-//         let mut string = String::new();
-//         for (lhs, rhs) in self.iter() {
-//             string += &format!("    {} = {}\n", lhs.to_tree_v1(), rhs.to_tree_v1());
-//         }
-//         format!("Constr (\n{})", string)
-//     }
-// }
+impl DebugPrintContext {
+    fn new() -> Self {
+        DebugPrintContext {
+            parent_precedence: -1,
+        }
+    }
+}
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::parser::parse;
+trait DebugPrint {
+    fn dbg_print_raw(&self, ctx: &DebugPrintContext) -> String;
+    /// None means never add parentheses
+    fn precedence(&self) -> i32;
+    fn dbg_print_root(&self) -> String {
+        self.dbg_print_raw(&DebugPrintContext::new())
+    }
+    fn dbg_print(&self, ctx: &DebugPrintContext) -> String {
+        let raw = self.dbg_print_raw(ctx);
+        if ctx.parent_precedence == -1 || self.precedence() == -1 {
+            raw
+        } else if ctx.parent_precedence <= self.precedence() {
+            format!("({raw})")
+        } else {
+            raw
+        }
+    }
+}
 
-//     #[test]
-//     fn test() {
-//         // fn (x: Int) { x }
-//         let expr = parse("{ let f = fn (x, y) { x }; f(1,2)} ").unwrap();
-//         let mut context = Context::empty();
-//         let ty = type_of(expr.clone(), &mut context);
-//         println!(
-//             "Expr: \n{:?}\n Type: \n{}\n Context: \n{}\n",
-//             expr,
-//             ty.to_tree_v1(),
-//             context.to_tree_v1()
-//         );
-//         println!("\n\nSolu: {}", type_term(expr).to_tree_v1());
-//     }
-// }
+impl DebugPrint for Type {
+    fn precedence(&self) -> i32 {
+        match self {
+            Type::Primitive(_) => 0,
+            Type::Var { .. } => 0,
+            Type::Func { lhs, rhs } => 1,
+        }
+    }
+
+    fn dbg_print_raw(&self, ctx: &DebugPrintContext) -> String {
+        match self {
+            Type::Primitive(p) => format!("{p:?}"),
+            Type::Func { lhs, rhs } => {
+                let lhs_str = lhs
+                    .iter()
+                    .map(|t| t.dbg_print(ctx))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if lhs.len() == 1 {
+                    format!("{} -> {}", lhs_str, rhs.dbg_print(ctx))
+                } else {
+                    format!("({lhs_str}) -> {}", rhs.dbg_print(ctx))
+                }
+            }
+            Type::Var { name } => format!("?{name}"),
+        }
+    }
+}
+
+impl DebugPrint for HashSet<(Type, Type)> {
+    fn dbg_print_raw(&self, ctx: &DebugPrintContext) -> String {
+        if self.is_empty() {
+            return "∅".to_string();
+        }
+        self.iter()
+            .map(|(lhs, rhs)| {
+                format!(
+                    "{lhs} = {rhs}",
+                    lhs = lhs.dbg_print(ctx),
+                    rhs = rhs.dbg_print(ctx)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+    fn precedence(&self) -> i32 {
+        -1
+    }
+}
+
+impl<T> DebugPrint for Option<T>
+where
+    T: DebugPrint,
+{
+    fn dbg_print_raw(&self, ctx: &DebugPrintContext) -> String {
+        match self {
+            Some(t) => t.dbg_print(ctx),
+            None => "None".to_string(),
+        }
+    }
+    fn precedence(&self) -> i32 {
+        match self {
+            Some(t) => t.precedence(),
+            None => 0,
+        }
+    }
+}
+
+#[cfg(test)]
+fn test_unify(source: &str) {
+    use crate::ast::Term;
+    use crate::compat_serialize::TreeContext;
+    use crate::parser::parse;
+    use pretty_assertions::assert_eq;
+    colog::default_builder()
+        .filter_level(log::LevelFilter::Debug)
+        .init();
+    let term = parse(source).unwrap();
+    debug!(
+        "term: {term}",
+        term = term
+            .into_tree(&TreeContext {
+                src: source.to_string(),
+                version: 1
+            })
+            .to_xml(&TreeContext {
+                src: source.to_string(),
+                version: 1
+            })
+    );
+    let ty: Type = type_term(term).unwrap();
+}
+
+#[test]
+fn unify_test1() {
+    test_unify(
+        "
+{
+    let a = 1;
+    let f = fn (x) { x };
+    let b = f(a);
+    b
+}
+    ",
+    )
+}
