@@ -1,96 +1,7 @@
-use std::{collections::HashMap, fmt::format};
-
-use super::ast::*;
+use crate::span::Span;
+use crate::testing::tree::*;
+use crate::ast::*;
 use crate::typing::*;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Tree {
-    None,
-    Bool(bool),
-    Int(i32),
-    String(String),
-    Object(TreeObject),
-    Array(TreeArray),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TreeObject {
-    fields: Vec<(String, Tree)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TreeArray {
-    array: Vec<Tree>,
-}
-
-impl Into<Tree> for i32 {
-    fn into(self) -> Tree {
-        Tree::Int(self)
-    }
-}
-
-impl Into<Tree> for bool {
-    fn into(self) -> Tree {
-        Tree::Bool(self)
-    }
-}
-
-impl Into<Tree> for String {
-    fn into(self) -> Tree {
-        Tree::String(self)
-    }
-}
-impl Into<Tree> for &str {
-    fn into(self) -> Tree {
-        Tree::String(self.to_string())
-    }
-}
-impl Into<Tree> for TreeObject {
-    fn into(self) -> Tree {
-        Tree::Object(self)
-    }
-}
-
-impl Into<Tree> for TreeArray {
-    fn into(self) -> Tree {
-        Tree::Array(self)
-    }
-}
-
-impl TreeObject {
-    fn new() -> TreeObject {
-        TreeObject { fields: Vec::new() }
-    }
-    fn new_basic(type_name: &str, ctx: &TreeContext) -> TreeObject {
-        TreeObject::new().add_field("type_name", type_name.to_string())
-    }
-    fn add_field<T: Into<Tree>>(mut self, key: &str, value: T) -> TreeObject {
-        self.fields.push((key.to_string(), value.into()));
-        self
-    }
-    fn get(&self, key: &str) -> Option<&Tree> {
-        self.fields.iter().find(|(k, _)| k == key).map(|(_, v)| v)
-    }
-    fn iter(&self) -> impl Iterator<Item = (&String, &Tree)> {
-        self.fields.iter().map(|(k, v)| (k, v))
-    }
-}
-
-impl TreeArray {
-    fn new() -> TreeArray {
-        TreeArray { array: Vec::new() }
-    }
-    fn add_item<T: Into<Tree>>(mut self, item: T) -> TreeArray {
-        self.array.push(item.into());
-        self
-    }
-    fn get(&self, index: usize) -> Option<&Tree> {
-        self.array.get(index)
-    }
-    fn iter(&self) -> impl Iterator<Item = &Tree> {
-        self.array.iter()
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TreeContext {
@@ -102,33 +13,6 @@ pub struct TreeContext {
 
 pub trait IntoTreeWithContext {
     fn into_tree(self: &Self, ctx: &TreeContext) -> Tree;
-}
-
-impl Span for Expr {
-    fn span(self: &Expr) -> (usize, usize) {
-        match self {
-            Expr::UnitLit { span } => *span,
-            Expr::IntLit { span, .. } => *span,
-            Expr::BoolLit { span, .. } => *span,
-            Expr::Var { span, .. } => *span,
-            Expr::UnaryOp { span, .. } => *span,
-            Expr::BinaryOp { span, .. } => *span,
-            Expr::Seq { span, .. } => *span,
-            Expr::App { span, .. } => *span,
-            Expr::Func { span, .. } => *span,
-            Expr::Let { span, .. } => *span,
-        }
-    }
-}
-
-impl Expr {
-    fn basic_info_tree(&self, type_name: &str, ctx: &TreeContext) -> TreeObject {
-        let span = self.span();
-        TreeObject::new()
-            .add_field("type_name", "Expr::".to_string() + type_name)
-            .add_field("source", ctx.src[span.0..span.1].to_string())
-            .into()
-    }
 }
 
 impl<T: IntoTreeWithContext> IntoTreeWithContext for Box<T> {
@@ -213,9 +97,7 @@ impl IntoTreeWithContext for PrimitiveType {
         }
     }
 }
-pub trait Span {
-    fn span(self: &Self) -> (usize, usize);
-}
+
 
 trait BasicInfoTree {
     fn basic_info_tree(self: &Self, type_name: &str, ctx: &TreeContext) -> TreeObject;
@@ -231,25 +113,19 @@ impl<T: Span> BasicInfoTree for T {
     }
 }
 
-impl Span for Ty {
-    fn span(self: &Self) -> (usize, usize) {
-        match self {
-            Ty::Bool { span } => *span,
-            Ty::Int { span } => *span,
-            Ty::Arrow { span, .. } => *span,
-        }
-    }
-}
-
-impl IntoTreeWithContext for Ty {
+impl IntoTreeWithContext for TypeExpr {
     fn into_tree(self: &Self, ctx: &TreeContext) -> Tree {
         match self {
-            Ty::Bool { .. } => self.basic_info_tree("TyBool", ctx).into(),
-            Ty::Int { .. } => self.basic_info_tree("TyInt", ctx).into(),
-            Ty::Arrow { l, r, .. } => self
+            TypeExpr::Bool { .. } => self.basic_info_tree("TyBool", ctx).into(),
+            TypeExpr::Int { .. } => self.basic_info_tree("TyInt", ctx).into(),
+            TypeExpr::Arrow { lhs: l, rhs: r, .. } => self
                 .basic_info_tree("TyArrow", ctx)
                 .add_field("lhs", l.into_tree(ctx))
                 .add_field("rhs", r.into_tree(ctx))
+                .into(),
+            TypeExpr::Tuple { elems, .. } => self
+                .basic_info_tree("TyTuple", ctx)
+                .add_field("elems", elems.into_tree(ctx))
                 .into(),
         }
     }
@@ -258,12 +134,12 @@ impl IntoTreeWithContext for Ty {
 impl IntoTreeWithContext for Expr {
     fn into_tree(self: &Expr, ctx: &TreeContext) -> Tree {
         match self {
-            Expr::UnitLit { .. } => self.basic_info_tree("EUnitLit", ctx).into(),
-            Expr::IntLit { value, .. } => self
+            Expr::Unit { .. } => self.basic_info_tree("EUnitLit", ctx).into(),
+            Expr::Int { value, .. } => self
                 .basic_info_tree("EIntLit", ctx)
                 .add_field("value", *value)
                 .into(),
-            Expr::BoolLit { value, .. } => self
+            Expr::Bool { value, .. } => self
                 .basic_info_tree("EBoolLit", ctx)
                 .add_field("value", *value)
                 .into(),
@@ -282,22 +158,30 @@ impl IntoTreeWithContext for Expr {
                 .add_field("lhs", lhs.into_tree(ctx))
                 .add_field("rhs", rhs.into_tree(ctx))
                 .into(),
-            Expr::App { func, args, .. } => self
+            Expr::App { func, arg, .. } => self
                 .basic_info_tree("EApp", ctx)
                 .add_field("func", func.into_tree(ctx))
-                .add_field("args", args.into_tree(ctx))
+                .add_field(
+                    if ctx.version == 1 { "args" } else { "arg" },
+                    if ctx.version == 1 {
+                        vec![arg.clone()].into_tree(ctx)
+                    } else {
+                        arg.into_tree(ctx)
+                    },
+                )
                 .into(),
             Expr::Func {
-                params,
+                param_pattern,
                 ret_ty,
                 body,
                 ..
-            } => self
-                .basic_info_tree("EFunc", ctx)
-                .add_field("params", params.into_tree(ctx))
-                .add_field("ret_ty", ret_ty.into_tree(ctx))
-                .add_field("body", body.into_tree(ctx))
-                .into(),
+            } => todo!(),
+            // self
+            //     .basic_info_tree("EFunc", ctx)
+            //     .add_field("params", param_pattern.into_tree(ctx))
+            //     .add_field("ret_ty", ret_ty.into_tree(ctx))
+            //     .add_field("body", body.into_tree(ctx))
+            //     .into(),
             Expr::Let {
                 name,
                 ty,
@@ -314,23 +198,14 @@ impl IntoTreeWithContext for Expr {
                 .basic_info_tree("ESeq", ctx)
                 .add_field("seq", seq.into_tree(ctx))
                 .into(),
+            Expr::Tuple { elems, span } => self
+                .basic_info_tree("ETuple", ctx)
+                .add_field("elems", elems.into_tree(ctx))
+                .into(),
         }
     }
 }
 
-impl Span for Term {
-    fn span(self: &Self) -> (usize, usize) {
-        match self {
-            Term::Lit { span, .. } => *span,
-            Term::Var { span, .. } => *span,
-            Term::App { span, .. } => *span,
-            Term::Func { span, .. } => *span,
-            Term::Let { span, .. } => *span,
-            Term::Seq { span, .. } => *span,
-            Term::Op { span, .. } => *span,
-        }
-    }
-}
 
 impl IntoTreeWithContext for Term {
     fn into_tree(self: &Self, ctx: &TreeContext) -> Tree {
@@ -343,19 +218,26 @@ impl IntoTreeWithContext for Term {
                 .basic_info_tree("TmVar", ctx)
                 .add_field("name", name.to_string())
                 .into(),
-            Term::App { callee, args, .. } => self
+            Term::App { callee, arg, .. } => self
                 .basic_info_tree("TmApp", ctx)
                 .add_field("callee", callee.into_tree(ctx))
-                .add_field("args", args.into_tree(ctx))
+                .add_field(
+                    if ctx.version == 1 { "args" } else { "arg" },
+                    if ctx.version == 1 {
+                        vec![arg.clone()].into_tree(ctx)
+                    } else {
+                        arg.into_tree(ctx)
+                    },
+                )
                 .into(),
             Term::Func {
-                params,
+                param,
                 ret_ty,
                 body,
                 ..
             } => self
                 .basic_info_tree("TmFunc", ctx)
-                .add_field("params", params.into_tree(ctx))
+                .add_field("params", param.into_tree(ctx))
                 .add_field("ret_ty", ret_ty.into_tree(ctx))
                 .add_field("body", body.into_tree(ctx))
                 .into(),
@@ -380,6 +262,10 @@ impl IntoTreeWithContext for Term {
                 .basic_info_tree("TmOp", ctx)
                 .add_field("op", op.into_tree(ctx))
                 .into(),
+            Term::Tuple { elems, .. } => self
+                .basic_info_tree("TmTuple", ctx)
+                .add_field("elems", elems.into_tree(ctx))
+                .into(),
         }
     }
 }
@@ -396,6 +282,9 @@ impl IntoTreeWithContext for Type {
                 .into(),
             Type::Var { name } => TreeObject::new_basic("TVar", ctx)
                 .add_field("name", name.to_string())
+                .into(),
+            Type::Tuple { elems } => TreeObject::new_basic("TTuple", ctx)
+                .add_field("elems", elems.into_tree(ctx))
                 .into(),
         }
     }
