@@ -148,7 +148,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn find_by_name(&self, name: &str) -> Option<&Binding> {
+    pub fn find_self_by_name(&self, name: &str) -> Option<&Binding> {
         let mut i = 0;
         loop {
             match self.get(i) {

@@ -184,12 +184,12 @@ impl Block {
 }
 
 impl Expr {
-    fn find_by_name<'a>(
+    fn find_var_by_name<'a>(
         name: &str,
         ctx: &'a Context,
         span: (usize, usize),
     ) -> TypingResult<&'a Bindable> {
-        match ctx.find_by_name(name) {
+        match ctx.find_self_by_name(name) {
             Some(binding) => Ok(&binding.1),
             None => Err(TypingErr::UnboundVar { span }),
         }
@@ -210,7 +210,7 @@ impl Expr {
                 span: *span,
             }),
             Expr::Var { name, span } => {
-                let ty = Expr::find_by_name(name.as_str(), ctx, *span)?.get_type();
+                let ty = Self::find_var_by_name(name.as_str(), ctx, *span)?.get_type();
                 Ok(TExpr::Var {
                     name: name.clone(),
                     span: *span,
@@ -226,7 +226,7 @@ impl Expr {
                 callee: Box::new(TExpr::Var {
                     name: op.name(),
                     span: *span,
-                    ty: Expr::find_by_name(op.name().as_str(), ctx, *span)?.get_type(),
+                    ty: Expr::find_var_by_name(op.name().as_str(), ctx, *span)?.get_type(),
                 }),
                 arg: Box::new(arg.to_typed(ctx)?),
                 span: *span,
@@ -241,7 +241,7 @@ impl Expr {
                 callee: Box::new(TExpr::Var {
                     name: op.name(),
                     span: *span,
-                    ty: Expr::find_by_name(op.name().as_str(), ctx, *span)?.get_type(),
+                    ty: Expr::find_var_by_name(op.name().as_str(), ctx, *span)?.get_type(),
                 }),
                 arg: Box::new(TExpr::Tuple {
                     elems: vec![arg1.to_typed(ctx)?, arg2.to_typed(ctx)?],
@@ -288,155 +288,4 @@ fn format_xml(src: &str) -> Result<String, xml::reader::Error> {
         }
     }
     Ok(String::from_utf8(dest).unwrap())
-}
-
-#[cfg(test)]
-fn test_parse(src: &str, expected: &str) {
-    // use pretty_assertions::{assert_eq, assert_ne};
-    // let expected = format_xml(expected).unwrap();
-    // let parser = Parser::new(src);
-    // let r = parser.parse(src).unwrap();
-    // let ctx = TreeContext {
-    //     src: src.to_string(),
-    //     version: 1,
-    // };
-    // let actual = r.into_tree(&ctx).to_xml(&ctx);
-    // let actual = format_xml(actual.as_str()).unwrap();
-    // assert_eq!(actual, expected);
-}
-
-#[test]
-fn app_test1() {
-    test_parse(
-        "{foo bar baz}",
-        r###"
-  <TmSeq source="foo bar baz">
-  <seq>
-    <Item index="0">
-      <TmApp source="foo bar baz">
-        <callee>
-          <TmVar source="foo">
-            <name>foo</name>
-          </TmVar>
-        </callee>
-        <args>
-          <Item index="0">
-            <TmApp source="bar baz">
-              <callee>
-                <TmVar source="bar">
-                  <name>bar</name>
-                </TmVar>
-              </callee>
-              <args>
-                <Item index="0">
-                  <TmVar source="baz">
-                    <name>baz</name>
-                  </TmVar>
-                </Item>
-              </args>
-            </TmApp>
-          </Item>
-        </args>
-      </TmApp>
-    </Item>
-  </seq>
-</TmSeq>"###,
-    );
-}
-
-#[test]
-fn source_to_dexpr_test() {
-    test_parse(
-        "{let a = { 1 + 2; let b = a + 3; };4}",
-        r##"<TmSeq source="let a = { 1 + 2; let b = a + 3; };4">
-  <seq>
-    <Item index="0">
-      <TmLet source="let a = { 1 + 2; let b = a + 3; };">
-        <name>a</name>
-        <ty>
-          <None />
-        </ty>
-        <rhs>
-          <TmSeq source="1 + 2; let b = a + 3;">
-            <seq>
-              <Item index="0">
-                <TmApp source="1 + 2">
-                  <callee>
-                    <TmOp source="+">
-                      <op>Add</op>
-                    </TmOp>
-                  </callee>
-                  <args>
-                    <Item index="0">
-                      <TmLit source="1">
-                        <value>1</value>
-                      </TmLit>
-                    </Item>
-                    <Item index="1">
-                      <TmLit source="2">
-                        <value>2</value>
-                      </TmLit>
-                    </Item>
-                  </args>
-                </TmApp>
-              </Item>
-              <Item index="1">
-                <TmLet source="let b = a + 3;">
-                  <name>b</name>
-                  <ty>
-                    <None />
-                  </ty>
-                  <rhs>
-                    <TmApp source="a + 3">
-                      <callee>
-                        <TmOp source="+">
-                          <op>Add</op>
-                        </TmOp>
-                      </callee>
-                      <args>
-                        <Item index="0">
-                          <TmVar source="a">
-                            <name>a</name>
-                          </TmVar>
-                        </Item>
-                        <Item index="1">
-                          <TmLit source="3">
-                            <value>3</value>
-                          </TmLit>
-                        </Item>
-                      </args>
-                    </TmApp>
-                  </rhs>
-                  <body>
-                    <TmSeq source="">
-                      <seq>
-                        <Item index="0">
-                          <TmLit source="">
-                            <value>LUnit</value>
-                          </TmLit>
-                        </Item>
-                      </seq>
-                    </TmSeq>
-                  </body>
-                </TmLet>
-              </Item>
-            </seq>
-          </TmSeq>
-        </rhs>
-        <body>
-          <TmSeq source="4">
-            <seq>
-              <Item index="0">
-                <TmLit source="4">
-                  <value>4</value>
-                </TmLit>
-              </Item>
-            </seq>
-          </TmSeq>
-        </body>
-      </TmLet>
-    </Item>
-  </seq>
-</TmSeq>"##,
-    )
 }

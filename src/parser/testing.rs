@@ -1,12 +1,15 @@
+use crate::LiteralValue;
+use crate::{ast::Expr, parser::Parser};
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Once;
-use tracing::field::{Field, Visit};
+use tracing::field::Field;
+use tracing_subscriber;
 use tracing_subscriber::fmt::{self, format::Writer, FormatEvent, FormatFields};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 struct OnlyCurrentSpan;
-pub struct StringVisitor {}
 
 impl<S, N> FormatEvent<S, N> for OnlyCurrentSpan
 where
@@ -92,33 +95,30 @@ pub fn init_testing() {
             .init();
     });
 }
+
+fn assert_parse_expr(input: &str, expr: Expr) {
+    init_testing();
+    let mut parser = Parser::new(input);
+    let actual = match parser.expr() {
+        Ok(actual) => actual,
+        Err(err) => {
+            panic!("Err: {:?}, Parser tried: {:?}", err, parser.trials);
+        }
+    };
+    let actual_str = actual.literal_value();
+    println!("\nGot:\n{actual_str}\n");
+    assert_eq!(actual, expr);
+} 
+
 mod cases {
-    use std::rc::Rc;
-
+    use super::assert_parse_expr;
     use crate::ast::*;
-    use crate::parser::testing::init_testing;
-    use crate::LiteralValue;
-    use crate::{ast::Expr, parser::Parser};
-    use pretty_assertions::assert_eq;
-    use tracing_subscriber;
-
-    fn test_parse_expr_result(input: &str, expr: Expr) {
-        init_testing();
-        let mut parser = Parser::new(input);
-        let actual = match parser.expr() {
-            Ok(actual) => actual,
-            Err(err) => {
-                panic!("Err: {:?}, Parser tried: {:?}", err, parser.trials);
-            }
-        };
-        let actual_str = actual.literal_value();
-        println!("\nGot:\n{actual_str}\n");
-        assert_eq!(actual, expr);
-    }
+    use crate::ast::Expr;
+    use std::rc::Rc;
 
     #[test]
     fn test_var() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "x",
             Expr::Var {
                 name: "x".to_string(),
@@ -129,7 +129,7 @@ mod cases {
 
     #[test]
     fn test_0_arg_func() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{ fn foo() -> (int, int) { (1,2) } }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -176,7 +176,7 @@ mod cases {
 
     #[test]
     fn test_1_arg_func() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{ fn foo (a: int) -> int { a + 1 } 2 }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -224,7 +224,7 @@ mod cases {
 
     #[test]
     fn test_2_arg_func() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{ fn foo(a: int, b: int) -> int { a + b + 1 } }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -288,7 +288,7 @@ mod cases {
 
     #[test]
     fn test_app() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "
             { fn foo(a: int) -> int { 1 } foo 1 }",
             Expr::Block(Box::new(Block {
@@ -335,7 +335,7 @@ mod cases {
 
     #[test]
     fn test_mutual_recusive() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "
             {
              fn foo() -> int { bar() }
@@ -416,7 +416,7 @@ mod cases {
 
     #[test]
     fn test_let() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{ let a : int = 1; let b : int = a + 1; b }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -467,7 +467,7 @@ mod cases {
     }
     #[test]
     fn test_pattern_1() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{let (a: int, b: int) = (1,2);}",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -514,7 +514,7 @@ mod cases {
 
     #[test]
     fn test_pattern_2() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{let (a: int, ()) = 1, ();}",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -554,7 +554,7 @@ mod cases {
 
     #[test]
     fn test_pattern_3() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{let c: int = a + b;}",
             Expr::Block(Box::new(Block {
                 stmts: vec![
@@ -591,7 +591,7 @@ mod cases {
 
     #[test]
     fn test_no_ty_anno() {
-        test_parse_expr_result(
+        assert_parse_expr(
             "{let (x, y) = (1, 2);}",
             Expr::Block(Box::new(Block {
                 stmts: vec![
