@@ -1,5 +1,5 @@
 use crate::ast::typed::Type;
-use std::rc::Rc;
+use std::{cell::{RefCell, RefMut}, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bindable {
@@ -15,14 +15,17 @@ pub enum Context<'p> {
     Basic {
         bindings: Vec<Binding>,
         parent: Option<&'p Context<'p>>,
+        next_type_var: RefCell<u32>,
     },
     FnFilter {
         filter: fn(&Binding) -> bool,
         parent: &'p Context<'p>,
+        next_type_var: RefCell<u32>,
     },
     ClosureFilter {
         filter: Rc<dyn Fn(&Binding) -> bool>,
         parent: &'p Context<'p>,
+        next_type_var: RefCell<u32>,
     },
 }
 
@@ -32,7 +35,7 @@ pub struct ContextIter<'a> {
     rev_index: usize,
 }
 
-enum GetResult<T> {
+pub enum GetResult<T> {
     Ok(T),
     Filtered,
     OutOfBounds,
@@ -43,6 +46,7 @@ impl<'a> Context<'a> {
         Context::Basic {
             bindings: vec![],
             parent: None,
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -50,6 +54,7 @@ impl<'a> Context<'a> {
         Context::Basic {
             bindings: vec![],
             parent: Some(self),
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -57,6 +62,7 @@ impl<'a> Context<'a> {
         Context::Basic {
             bindings: vec![binding],
             parent: Some(self),
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -64,6 +70,7 @@ impl<'a> Context<'a> {
         Context::Basic {
             bindings,
             parent: Some(self),
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -71,6 +78,7 @@ impl<'a> Context<'a> {
         Context::FnFilter {
             filter,
             parent: self,
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -78,6 +86,7 @@ impl<'a> Context<'a> {
         Context::ClosureFilter {
             filter,
             parent: self,
+            next_type_var: RefCell::new(0),
         }
     }
 
@@ -91,7 +100,9 @@ impl<'a> Context<'a> {
 
     pub fn get(&self, rev_index: usize) -> GetResult<&Binding> {
         match self {
-            Context::Basic { bindings, parent } => {
+            Context::Basic {
+                bindings, parent, ..
+            } => {
                 if let Some(r) = bindings.get(bindings.len() - 1 - rev_index) {
                     GetResult::Ok(r)
                 } else {
@@ -104,7 +115,7 @@ impl<'a> Context<'a> {
                     }
                 }
             }
-            Context::FnFilter { filter, parent } => match parent.get(rev_index) {
+            Context::FnFilter { filter, parent, .. } => match parent.get(rev_index) {
                 GetResult::Ok(binding) => {
                     if filter(binding) {
                         GetResult::Ok(binding)
@@ -129,7 +140,9 @@ impl<'a> Context<'a> {
 
     pub fn len(&self) -> usize {
         match self {
-            Context::Basic { bindings, parent } => bindings.len() + parent.map_or(0, |p| p.len()),
+            Context::Basic {
+                bindings, parent, ..
+            } => bindings.len() + parent.map_or(0, |p| p.len()),
             Context::FnFilter { parent, .. } => parent.len(),
             Context::ClosureFilter { parent, .. } => parent.len(),
         }
@@ -179,5 +192,21 @@ impl Bindable {
             Bindable::Var(ty) => ty.clone(),
             Bindable::Func(ty) => ty.clone(),
         }
+    }
+}
+
+impl<'a> Context<'a> {
+    pub fn next_type_var(&self) -> RefMut<'_, u32> {
+        match self {
+            Context::Basic { next_type_var, .. }
+            | Context::FnFilter { next_type_var, .. }
+            | Context::ClosureFilter { next_type_var, .. } => next_type_var.borrow_mut(),
+        }
+    }
+    
+    pub fn fresh_var(&self) -> u32 {
+        let next_var = *self.next_type_var();
+        *self.next_type_var() += 1;
+        next_var
     }
 }

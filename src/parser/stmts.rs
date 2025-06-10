@@ -28,7 +28,7 @@ impl<'a> Parser<'a> {
     pub fn let_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let rule = function_name!();
         let _let = self.expect(TokenType::Let, rule)?;
-        let pattern = self.pattern()?;
+        let pattern = self.pattern_with_optional_type_anno()?;
         let _eq = self.expect(TokenType::Eq, rule)?;
         let rhs = self.expr()?;
         let _semi = self.expect(TokenType::Semicolon, rule)?;

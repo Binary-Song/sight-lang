@@ -1,12 +1,12 @@
 use crate::ast::*;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
+use crate::parser::types::Prec as TypePrec;
 use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::span::Span;
 use function_name::named;
 use tracing::instrument;
-use crate::parser::types::Prec as TypePrec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Prec {
@@ -39,16 +39,34 @@ impl<'a> Parser<'a> {
         } else {
             panic!("Logic error");
         };
-        let _colon = self.expect(TokenType::Colon, rule)?;
-        // We have to start from "below tuple types". Otherwise 
-        // (a: int, b: int) will be parsed as (a: (int, b)...)
-        let type_anno =
-            self.type_expr_with_max_prec(TypePrec::Tuple.sub_by_one())?;
-        Ok(Pattern::Var {
-            name: name,
-            ty: type_anno,
-            span: span,
-        })
+
+        let type_anno_parser = |parser: &mut Self| {
+            let _colon = parser.expect(TokenType::Colon, rule)?;
+            // We have to start from "below tuple types". Otherwise
+            // (a: int, b: int) will be parsed as (a: (int, b)...)
+            let type_anno = parser.type_expr_with_max_prec(TypePrec::Tuple.sub_by_one())?;
+            Ok(Pattern::Var {
+                name: name.clone(),
+                ty: type_anno,
+                span: span,
+            })
+        };
+
+        let is_type_opt = self.optional_type_anno_in_patterns.value();
+
+        if is_type_opt {
+            self.ll1_try_parse(&[&type_anno_parser, &|parser: &mut Self| {
+                Ok(Pattern::Var {
+                    name: name.clone(),
+                    ty: TypeExpr::Unknown {
+                        span: (span.1, span.1),
+                    },
+                    span,
+                })
+            }])
+        } else {
+            type_anno_parser(self)
+        }
     }
 
     #[named]
@@ -88,6 +106,14 @@ impl<'a> Parser<'a> {
     #[instrument(ret)]
     pub fn pattern(&mut self) -> Result<Pattern, ParseErr> {
         self.pattern_with_max_prec(Prec::Max.sub_by_one())
+    }
+
+    #[instrument(ret)]
+    pub fn pattern_with_optional_type_anno(&mut self) -> Result<Pattern, ParseErr> {
+        self.optional_type_anno_in_patterns.push(true);
+        let r = self.pattern();
+        self.optional_type_anno_in_patterns.pop();
+        r
     }
 
     pub fn pattern_with_max_prec(&mut self, max_prec: Prec) -> Result<Pattern, ParseErr> {

@@ -92,11 +92,11 @@ pub fn init_testing() {
             .init();
     });
 }
-mod expr {
+mod cases {
     use std::rc::Rc;
 
     use crate::ast::*;
-    use crate::parser::tests::init_testing;
+    use crate::parser::testing::init_testing;
     use crate::LiteralValue;
     use crate::{ast::Expr, parser::Parser};
     use pretty_assertions::assert_eq;
@@ -117,7 +117,7 @@ mod expr {
     }
 
     #[test]
-    fn test_parse_expr_var() {
+    fn test_var() {
         test_parse_expr_result(
             "x",
             Expr::Var {
@@ -128,7 +128,7 @@ mod expr {
     }
 
     #[test]
-    fn test_parse_expr_unit_arg_func() {
+    fn test_0_arg_func() {
         test_parse_expr_result(
             "{ fn foo() -> (int, int) { (1,2) } }",
             Expr::Block(Box::new(Block {
@@ -175,7 +175,7 @@ mod expr {
     }
 
     #[test]
-    fn test_parse_expr_1_arg_func() {
+    fn test_1_arg_func() {
         test_parse_expr_result(
             "{ fn foo (a: int) -> int { a + 1 } 2 }",
             Expr::Block(Box::new(Block {
@@ -223,7 +223,7 @@ mod expr {
     }
 
     #[test]
-    fn test_parse_expr_func() {
+    fn test_2_arg_func() {
         test_parse_expr_result(
             "{ fn foo(a: int, b: int) -> int { a + b + 1 } }",
             Expr::Block(Box::new(Block {
@@ -287,7 +287,7 @@ mod expr {
     }
 
     #[test]
-    fn test_parse_app() {
+    fn test_app() {
         test_parse_expr_result(
             "
             { fn foo(a: int) -> int { 1 } foo 1 }",
@@ -466,7 +466,7 @@ mod expr {
         );
     }
     #[test]
-    fn test_pattern1() {
+    fn test_pattern_1() {
         test_parse_expr_result(
             "{let (a: int, b: int) = (1,2);}",
             Expr::Block(Box::new(Block {
@@ -513,7 +513,7 @@ mod expr {
     }
 
     #[test]
-    fn test_pattern2() {
+    fn test_pattern_2() {
         test_parse_expr_result(
             "{let (a: int, ()) = 1, ();}",
             Expr::Block(Box::new(Block {
@@ -553,7 +553,7 @@ mod expr {
     }
 
     #[test]
-    fn test_pattern3() {
+    fn test_pattern_3() {
         test_parse_expr_result(
             "{let c: int = a + b;}",
             Expr::Block(Box::new(Block {
@@ -585,6 +585,53 @@ mod expr {
                     },
                 ],
                 span: (0, 21),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_no_ty_anno() {
+        test_parse_expr_result(
+            "{let (x, y) = (1, 2);}",
+            Expr::Block(Box::new(Block {
+                stmts: vec![
+                    Stmt::Let {
+                        lhs: Pattern::Tuple {
+                            elems: vec![
+                                Pattern::Var {
+                                    name: "x".to_string(),
+                                    ty: TypeExpr::Unknown { span: (7, 7) },
+                                    span: (6, 7),
+                                },
+                                Pattern::Var {
+                                    name: "y".to_string(),
+                                    ty: TypeExpr::Unknown { span: (10, 10) },
+                                    span: (9, 10),
+                                },
+                            ],
+                            span: (6, 10),
+                        },
+                        rhs: Expr::Tuple {
+                            elems: vec![
+                                Expr::Int {
+                                    value: 1,
+                                    span: (15, 16),
+                                },
+                                Expr::Int {
+                                    value: 2,
+                                    span: (18, 19),
+                                },
+                            ],
+                            span: (15, 19),
+                        },
+                        span: (1, 19),
+                    },
+                    Stmt::Expr {
+                        expr: Expr::Unit { span: (21, 22) },
+                        span: (21, 22),
+                    },
+                ],
+                span: (0, 22),
             })),
         );
     }

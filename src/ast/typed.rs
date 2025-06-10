@@ -81,7 +81,7 @@ pub enum Type {
     Int,
     Arrow { lhs: Box<Type>, rhs: Box<Type> },
     Tuple { elems: Vec<Type> },
-    TypeVar { index: i32 },
+    TypeVar { index: u32 },
 }
 
 /////////////////////////////////////////

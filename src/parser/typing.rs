@@ -68,6 +68,9 @@ impl TypeExpr {
                     elems: result_elems,
                 })
             }
+            TypeExpr::Unknown { span } => Ok(Type::TypeVar {
+                index: ctx.fresh_var(),
+            }),
         }
     }
 }
@@ -300,7 +303,6 @@ fn test_parse(src: &str, expected: &str) {
     // let actual = r.into_tree(&ctx).to_xml(&ctx);
     // let actual = format_xml(actual.as_str()).unwrap();
     // assert_eq!(actual, expected);
-    
 }
 
 #[test]

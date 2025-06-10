@@ -5,14 +5,14 @@ use crate::lexer::TokenType;
 use crate::span::Span;
 use function_name::named;
 use std::collections::VecDeque;
-use std::vec;
 use std::fmt::Debug;
+use std::vec;
 mod context;
 mod exprs;
 mod patterns;
 mod stmts;
 #[cfg(test)]
-mod tests;
+mod testing;
 mod types;
 mod typing;
 
@@ -34,9 +34,56 @@ enum ParseErr {
     UnexpectedTokens { got: Vec<Token> },
 }
 
+struct PropertyStack<T> {
+    stack: Vec<T>,
+    bottom: T,
+}
+
+impl<T: Clone> PropertyStack<T> {
+    pub fn new(init: T) -> Self {
+        PropertyStack {
+            stack: vec![],
+            bottom: init,
+        }
+    }
+
+    pub fn push(&mut self, value: T) {
+        self.stack.push(value);
+    }
+
+    pub fn pop(&mut self) {
+        if self.stack.is_empty() {
+            panic!("Logic error: PropertyStack cannot be popped when empty. Push/pop imbalance is a serious bug!");
+        }
+        self.stack.pop();
+    }
+
+    pub fn value(&self) -> T {
+        self.stack
+            .last()
+            .map(|x| x.clone())
+            .unwrap_or(self.bottom.clone())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+}
+
+impl<T> Drop for PropertyStack<T> {
+    fn drop(&mut self) {
+        if !self.stack.is_empty() {
+            panic!(
+                "Logic error: PropertyStack should be empty on drop. Push/pop imbalance is a serious bug!"
+            );
+        }
+    }
+}
+
 struct Parser<'a> {
     pub lexer: Lexer<'a>,
     trials: Vec<Trial>,
+    pub optional_type_anno_in_patterns: PropertyStack<bool>,
 }
 
 pub enum PeekerResult {
@@ -60,6 +107,7 @@ impl<'a> Parser<'a> {
             lexer: Lexer::new(input),
             //allow_block_stack: vec![true],
             trials: vec![],
+            optional_type_anno_in_patterns: PropertyStack::new(false),
         }
     }
 
@@ -78,13 +126,11 @@ impl<'a> Parser<'a> {
     //         .expect("Logic error: allow_blocks stack should not be empty")
     // }
 
-    pub fn peek(&mut self) -> Token
-    {
+    pub fn peek(&mut self) -> Token {
         return self.lexer.peek_token();
     }
 
-    pub fn consume(&mut self) -> Token
-    {
+    pub fn consume(&mut self) -> Token {
         return self.lexer.next_token();
     }
 

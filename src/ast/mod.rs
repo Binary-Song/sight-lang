@@ -183,4 +183,7 @@ pub enum TypeExpr {
         elems: Vec<TypeExpr>,
         span: (usize, usize),
     },
+    Unknown {
+        span: (usize, usize),
+    },
 }
