@@ -1,5 +1,8 @@
 use crate::ast::typed::Type;
-use std::{cell::{RefCell, RefMut}, rc::Rc};
+use std::{
+    cell::{RefCell, RefMut},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bindable {
@@ -35,7 +38,8 @@ pub struct ContextIter<'a> {
     rev_index: usize,
 }
 
-pub enum GetResult<T> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GetResult<T: std::fmt::Debug> {
     Ok(T),
     Filtered,
     OutOfBounds,
@@ -74,7 +78,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn add_fn_filter<F>(&self, filter: fn(&Binding) -> bool) -> Context {
+    pub fn add_fn_filter(&self, filter: fn(&Binding) -> bool) -> Context {
         Context::FnFilter {
             filter,
             parent: self,
@@ -82,7 +86,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn add_closure_filter<F>(&self, filter: Rc<dyn Fn(&Binding) -> bool>) -> Context {
+    pub fn add_closure_filter(&self, filter: Rc<dyn Fn(&Binding) -> bool>) -> Context {
         Context::ClosureFilter {
             filter,
             parent: self,
@@ -103,8 +107,9 @@ impl<'a> Context<'a> {
             Context::Basic {
                 bindings, parent, ..
             } => {
-                if let Some(r) = bindings.get(bindings.len() - 1 - rev_index) {
-                    GetResult::Ok(r)
+                if rev_index < bindings.len() {
+                    let item =  bindings.get(bindings.len() - 1 - rev_index );
+                    GetResult::Ok(item.unwrap())
                 } else {
                     match parent {
                         Some(p) => {
@@ -203,10 +208,136 @@ impl<'a> Context<'a> {
             | Context::ClosureFilter { next_type_var, .. } => next_type_var.borrow_mut(),
         }
     }
-    
+
     pub fn fresh_var(&self) -> u32 {
         let next_var = *self.next_type_var();
         *self.next_type_var() += 1;
         next_var
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn dummy_type() -> Type {
+        Type::Unit
+    }
+
+    #[test]
+    fn test_new_context() {
+        let ctx = Context::new();
+        assert_eq!(ctx.len(), 0);
+    }
+
+    #[test]
+    fn test_make_child() {
+        let parent = Context::new();
+        let child = parent.make_child();
+        assert_eq!(child.len(), 0);
+    }
+
+    #[test]
+    fn test_add_binding_and_len() {
+        let ctx = Context::new();
+        let binding = Binding("x".to_string(), Bindable::Var(dummy_type()));
+        let ctx2 = ctx.add_binding(binding.clone());
+        assert_eq!(ctx2.len(), 1);
+        match ctx2.get(0) {
+            GetResult::Ok(b) => assert_eq!(b, &binding),
+            _ => panic!("Binding not found"),
+        }
+    }
+
+    #[test]
+    fn test_add_bindings() {
+        let ctx = Context::new();
+        let b1 = Binding("a".to_string(), Bindable::Var(dummy_type()));
+        let b2 = Binding("b".to_string(), Bindable::Var(dummy_type()));
+        let ctx2 = ctx.add_bindings(vec![b1.clone(), b2.clone()]);
+        assert_eq!(ctx2.len(), 2);
+        assert_eq!(ctx2.get(0), GetResult::Ok(&b2));
+        assert_eq!(ctx2.get(1), GetResult::Ok(&b1));
+    }
+
+    fn filter_only_x(binding: &Binding) -> bool {
+        binding.0 == "x"
+    }
+
+    #[test]
+    fn test_add_fn_filter() {
+        let binding = Context::new();
+        let ctx = binding.add_binding(Binding("x".to_string(), Bindable::Var(dummy_type())));
+        let filtered_ctx = ctx.add_fn_filter(filter_only_x);
+        assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
+    }
+
+    #[test]
+    fn test_add_closure_filter() {
+        let binding = Context::new();
+        let ctx = binding.add_binding(Binding("y".to_string(), Bindable::Var(dummy_type())));
+        let filter = Rc::new(|b: &Binding| b.0 == "y");
+        let filtered_ctx = ctx.add_closure_filter(filter);
+        assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
+    }
+
+    #[test]
+    fn test_iter() {
+        let binding = Context::new();
+        let ctx = binding.add_bindings(vec![
+            Binding("a".to_string(), Bindable::Var(dummy_type())),
+            Binding("b".to_string(), Bindable::Var(dummy_type())),
+        ]);
+        let names: Vec<_> = ctx.iter().map(|b| b.0.clone()).collect();
+        assert_eq!(names, vec!["b".to_string(), "a".to_string()]);
+    }
+
+    #[test]
+    fn test_get_out_of_bounds() {
+        let ctx = Context::new();
+        assert!(matches!(ctx.get(0), GetResult::OutOfBounds));
+    }
+
+    #[test]
+    fn test_find_self_by_name() {
+        let binding = Context::new();
+        let ctx = binding.add_bindings(vec![
+            Binding("foo".to_string(), Bindable::Var(dummy_type())),
+            Binding("bar".to_string(), Bindable::Var(dummy_type())),
+        ]);
+        let found = ctx.find_self_by_name("foo");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().0, "foo");
+        assert!(ctx.find_self_by_name("baz").is_none());
+    }
+
+    #[test]
+    fn test_bindable_get_type() {
+        let ty = dummy_type();
+        let b = Bindable::Var(ty.clone());
+        assert_eq!(b.get_type(), ty);
+        let b = Bindable::Func(ty.clone());
+        assert_eq!(b.get_type(), ty);
+    }
+
+    #[test]
+    fn test_next_type_var_and_fresh_var() {
+        let ctx = Context::new();
+        assert_eq!(*ctx.next_type_var(), 0);
+        let v1 = ctx.fresh_var();
+        assert_eq!(v1, 0);
+        let v2 = ctx.fresh_var();
+        assert_eq!(v2, 1);
+        assert_eq!(*ctx.next_type_var(), 2);
+    }
+
+    #[test]
+    fn test_into_iter() {
+        let binding = Context::new();
+        let ctx = binding.add_binding(Binding("z".to_string(), Bindable::Var(dummy_type())));
+        let mut iter = (&ctx).into_iter();
+        let b = iter.next().unwrap();
+        assert_eq!(b.0, "z");
+        assert!(iter.next().is_none());
     }
 }
