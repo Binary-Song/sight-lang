@@ -30,7 +30,6 @@ impl Span for TypeExpr {
             | TypeExpr::Bool { span, .. }
             | TypeExpr::Int { span, .. }
             | TypeExpr::Arrow { span, .. }
-            | TypeExpr::Unknown { span, .. }
             | TypeExpr::Tuple { span, .. } => *span,
         }
     }

@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
             let type_anno = parser.type_expr_with_max_prec(TypePrec::Tuple.sub_by_one())?;
             Ok(Pattern::Var {
                 name: name.clone(),
-                ty: type_anno,
+                ty: Some(type_anno),
                 span: span,
             })
         };
@@ -58,9 +58,7 @@ impl<'a> Parser<'a> {
             self.ll1_try_parse(&[&type_anno_parser, &|parser: &mut Self| {
                 Ok(Pattern::Var {
                     name: name.clone(),
-                    ty: TypeExpr::Unknown {
-                        span: (span.1, span.1),
-                    },
+                    ty: None,
                     span,
                 })
             }])

@@ -184,7 +184,7 @@ mod cases {
                         name: "foo".to_string(),
                         param: Pattern::Var {
                             name: "a".to_string(),
-                            ty: TypeExpr::Int { span: (13, 16) },
+                            ty: Some(TypeExpr::Int { span: (13, 16) }),
                             span: (10, 11),
                         },
                         ret_ty: TypeExpr::Int { span: (21, 24) },
@@ -234,12 +234,12 @@ mod cases {
                             elems: vec![
                                 Pattern::Var {
                                     name: "a".to_string(),
-                                    ty: TypeExpr::Int { span: (12, 15) },
+                                    ty: Some(TypeExpr::Int { span: (12, 15) }),
                                     span: (9, 10),
                                 },
                                 Pattern::Var {
                                     name: "b".to_string(),
-                                    ty: TypeExpr::Int { span: (20, 23) },
+                                    ty: Some(TypeExpr::Int { span: (20, 23) }),
                                     span: (17, 18),
                                 },
                             ],
@@ -297,7 +297,7 @@ mod cases {
                         name: "foo".to_string(),
                         param: Pattern::Var {
                             name: "a".to_string(),
-                            ty: TypeExpr::Int { span: (25, 28) },
+                            ty: Some(TypeExpr::Int { span: (25, 28) }),
                             span: (22, 23),
                         },
                         ret_ty: TypeExpr::Int { span: (33, 36) },
@@ -423,7 +423,7 @@ mod cases {
                     Stmt::Let {
                         lhs: Pattern::Var {
                             name: "a".to_string(),
-                            ty: TypeExpr::Int { span: (10, 13) },
+                            ty: Some(TypeExpr::Int { span: (10, 13) }),
                             span: (6, 7),
                         },
                         rhs: Expr::Int {
@@ -435,7 +435,7 @@ mod cases {
                     Stmt::Let {
                         lhs: Pattern::Var {
                             name: "b".to_string(),
-                            ty: TypeExpr::Int { span: (27, 30) },
+                            ty: Some(TypeExpr::Int { span: (27, 30) }),
                             span: (23, 24),
                         },
                         rhs: Expr::BinaryOp {
@@ -476,12 +476,12 @@ mod cases {
                             elems: vec![
                                 Pattern::Var {
                                     name: "a".to_string(),
-                                    ty: TypeExpr::Int { span: (9, 12) },
+                                    ty: Some(TypeExpr::Int { span: (9, 12) }),
                                     span: (6, 7),
                                 },
                                 Pattern::Var {
                                     name: "b".to_string(),
-                                    ty: TypeExpr::Int { span: (17, 20) },
+                                    ty: Some(TypeExpr::Int { span: (17, 20) }),
                                     span: (14, 15),
                                 },
                             ],
@@ -523,7 +523,7 @@ mod cases {
                             elems: vec![
                                 Pattern::Var {
                                     name: "a".to_string(),
-                                    ty: TypeExpr::Int { span: (9, 12) },
+                                    ty: Some(TypeExpr::Int { span: (9, 12) }),
                                     span: (6, 7),
                                 },
                                 Pattern::Unit { span: (14, 16) },
@@ -561,7 +561,7 @@ mod cases {
                     Stmt::Let {
                         lhs: Pattern::Var {
                             name: "c".to_string(),
-                            ty: TypeExpr::Int { span: (8, 11) },
+                            ty: Some(TypeExpr::Int { span: (8, 11) }),
                             span: (5, 6),
                         },
                         rhs: Expr::BinaryOp {
@@ -600,12 +600,12 @@ mod cases {
                             elems: vec![
                                 Pattern::Var {
                                     name: "x".to_string(),
-                                    ty: TypeExpr::Unknown { span: (7, 7) },
+                                    ty: None,
                                     span: (6, 7),
                                 },
                                 Pattern::Var {
                                     name: "y".to_string(),
-                                    ty: TypeExpr::Unknown { span: (10, 10) },
+                                    ty: None,
                                     span: (9, 10),
                                 },
                             ],

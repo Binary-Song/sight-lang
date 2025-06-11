@@ -11,6 +11,7 @@ use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::context::Bindable;
 use crate::parser::context::Binding;
+use crate::parser::context::Constraint;
 use crate::parser::context::Context;
 use crate::parser::context::ContextIter;
 use crate::parser::Parser;
@@ -124,9 +125,6 @@ impl TypeExpr {
                     elems: result_elems,
                 })
             }
-            TypeExpr::Unknown { span } => Ok(Type::TypeVar {
-                index: ctx.fresh_var(),
-            }),
         }
     }
 }
@@ -141,7 +139,13 @@ impl Pattern {
                 span,
             } => Ok(TPattern::Var {
                 name: name.clone(),
-                ty: type_anno.to_type(ctx)?,
+                ty: if let Some(type_anno) = type_anno {
+                    type_anno.to_type(ctx)?
+                } else {
+                    Type::TypeVar {
+                        index: ctx.fresh_var(),
+                    }
+                },
                 span: *span,
             }),
             Pattern::Tuple { elems, span } => {
@@ -150,8 +154,14 @@ impl Pattern {
                     result_elems.push(elem.to_typed(ctx.clone())?);
                 }
                 Ok(TPattern::Tuple {
-                    elems: result_elems,
+                    ty: Type::Tuple {
+                        elems: result_elems
+                            .iter()
+                            .map(|e| e.get_type())
+                            .collect::<Vec<_>>(),
+                    },
                     span: *span,
+                    elems: result_elems,
                 })
             }
         }
@@ -218,6 +228,10 @@ impl Block {
                             ret_ty: func.ret_ty.to_type(ctx.clone())?,
                             body: func.body.to_typed(ctx.clone())?,
                             span: func.span,
+                            func_ty: Type::Arrow {
+                                lhs: Box::new(func.param.to_typed(ctx.clone())?.get_type()),
+                                rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
+                            },
                         }),
                     };
                     res_seq.push(tfunc);
@@ -229,6 +243,7 @@ impl Block {
             }
         }
         return Ok(TExpr::Seq {
+            ty: res_seq.last().map_or(Type::Unit, |e| e.get_type()),
             seq: res_seq,
             span: span,
         });
@@ -278,47 +293,68 @@ impl Expr {
                 arg,
                 span,
                 op_span,
-            } => Ok(TExpr::Application {
-                callee: Box::new(TExpr::Var {
+            } => Ok(Expr::App {
+                func: Box::new(Expr::Var {
                     name: op.name(),
-                    span: *span,
-                    ty: Expr::find_var_by_name(op.name().as_str(), &ctx, *span)?.get_type(),
+                    span: op_span.clone(),
                 }),
-                arg: Box::new(arg.to_typed(ctx)?),
-                span: *span,
-            }),
+                arg: arg.clone(),
+                span: span.clone(),
+            }
+            .to_typed(ctx.clone())?),
             Expr::BinaryOp {
                 op,
                 lhs: arg1,
                 rhs: arg2,
                 span,
                 op_span,
-            } => Ok(TExpr::Application {
-                callee: Box::new(TExpr::Var {
+            } => Ok(Expr::App {
+                func: Box::new(Expr::Var {
                     name: op.name(),
-                    span: *span,
-                    ty: Expr::find_var_by_name(op.name().as_str(), &ctx, *span)?.get_type(),
+                    span: op_span.clone(),
                 }),
-                arg: Box::new(TExpr::Tuple {
-                    elems: vec![arg1.to_typed(ctx.clone())?, arg2.to_typed(ctx.clone())?],
-                    span: *span,
+                arg: Box::new(Expr::Tuple {
+                    elems: vec![*arg1.clone(), *arg2.clone()],
+                    span: (arg1.span().0, arg2.span().1),
                 }),
                 span: *span,
-            }),
+            }
+            .to_typed(ctx.clone())?),
             Expr::Block(block) => block.to_typed(ctx.clone()),
-            Expr::App { func, arg, span } => Ok(TExpr::Application {
-                callee: Box::new(func.to_typed(ctx.clone())?),
-                arg: Box::new(arg.to_typed(ctx.clone())?),
-                span: *span,
-            }),
+            Expr::App { func, arg, span } => {
+                let func_typed = func.to_typed(ctx.clone())?;
+                let arg_typed = arg.to_typed(ctx.clone())?;
+                let func_ty = func_typed.get_type();
+                let arg_ty = arg_typed.get_type();
+                let ret_ty = Box::new(Type::TypeVar {
+                    index: ctx.fresh_var(),
+                });
+                let constr = Constraint {
+                    lhs: func_ty.clone(),
+                    rhs: Type::Arrow {
+                        lhs: Box::new(arg_ty),
+                        rhs: ret_ty.clone(),
+                    },
+                };
+                ctx.add_constraint(constr);
+                Ok(TExpr::Application {
+                    callee: Box::new(func_typed),
+                    arg: Box::new(arg_typed),
+                    ty: *ret_ty,
+                    span: *span,
+                })
+            }
             Expr::Tuple { elems, span } => {
                 let mut typed_elems = vec![];
                 for elem in elems {
                     typed_elems.push(elem.to_typed(ctx.clone())?);
                 }
                 Ok(TExpr::Tuple {
-                    elems: typed_elems,
                     span: *span,
+                    ty: Type::Tuple {
+                        elems: typed_elems.iter().map(|e| e.get_type()).collect(),
+                    },
+                    elems: typed_elems,
                 })
             }
         }
@@ -354,11 +390,14 @@ mod test {
 
     #[test]
     fn test_type_expr() {
-        let mut parser = Parser::new("{ let a = 1 + 1; }");
+        let mut parser = Parser::new("{ let a = 1; a + 1 }");
         let expr = parser.expr().unwrap();
         let ctx = Context::new_with_builtins();
         println!("ctx = {ctx:?}");
         let t = expr.to_typed(ctx.clone()).unwrap().literal_value();
-        println!("t = {t}");
+        println!("tree = {t}");
+        for constraint in ctx.constraints().borrow().iter() {
+            println!("constraint: {:?} == {:?}", constraint.lhs, constraint.rhs);
+        }
     }
 }

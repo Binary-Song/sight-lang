@@ -18,6 +18,7 @@ pub struct Func {
     pub name: String,
     pub param: Pattern,
     pub ret_ty: Type,
+    pub func_ty: Type,
     pub body: Expr,
     pub span: (usize, usize),
 }
@@ -34,6 +35,7 @@ pub enum Pattern {
     },
     Tuple {
         elems: Vec<Self>,
+        ty: Type,
         span: (usize, usize),
     },
 }
@@ -53,6 +55,7 @@ pub enum Expr {
     Application {
         callee: Box<Expr>,
         arg: Box<Expr>,
+        ty: Type,
         span: (usize, usize),
     },
     Let {
@@ -63,10 +66,12 @@ pub enum Expr {
     },
     Seq {
         seq: Vec<Self>,
+        ty: Type,
         span: (usize, usize),
     },
     Tuple {
         elems: Vec<Self>,
+        ty: Type,
         span: (usize, usize),
     },
     Func {
@@ -94,11 +99,8 @@ pub trait Typed {
 impl Typed for Pattern {
     fn get_type(&self) -> Type {
         match self {
-            Pattern::Unit { span } => Type::Unit,
-            Pattern::Var { name, ty, span } => ty.clone(),
-            Pattern::Tuple { elems, span } => Type::Tuple {
-                elems: elems.iter().map(|e| e.get_type()).collect(),
-            },
+            Pattern::Unit { .. } => Type::Unit,
+            Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => ty.clone(),
         }
     }
 }
@@ -126,25 +128,11 @@ impl Typed for Expr {
     fn get_type(&self) -> Type {
         match self {
             Expr::Lit { value, .. } => value.get_type(),
-            Expr::Var { ty, .. } => ty.clone(),
-            Expr::Application { callee, arg, span } => match callee.get_type() {
-                Type::Arrow { lhs, rhs } => *rhs,
-                _ => panic!("Expected a function type, found {:?}", callee.get_type()),
-            },
-            Expr::Let {
-                lhs,
-                rhs,
-                body,
-                span,
-            } => Type::Unit,
-            Expr::Seq { seq, span } => match seq.last() {
-                Some(last_expr) => last_expr.get_type(),
-                None => Type::Unit,
-            },
-            Expr::Tuple { elems, span } => Type::Tuple {
-                elems: elems.iter().map(|e| e.get_type()).collect(),
-            },
-            Expr::Func { func } => Type::Unit,
+            Expr::Var { ty, .. }
+            | Expr::Application { ty, .. }
+            | Expr::Seq { ty, .. }
+            | Expr::Tuple { ty, .. } => ty.clone(),
+            Expr::Let { .. } | Expr::Func { .. } => Type::Unit,
         }
     }
 }

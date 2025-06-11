@@ -141,7 +141,7 @@ pub enum Pattern {
     },
     Var {
         name: String,
-        ty: TypeExpr,
+        ty: Option<TypeExpr>,
         span: (usize, usize),
     },
     Tuple {
@@ -177,9 +177,6 @@ pub enum TypeExpr {
     },
     Tuple {
         elems: Vec<TypeExpr>,
-        span: (usize, usize),
-    },
-    Unknown {
         span: (usize, usize),
     },
 }
