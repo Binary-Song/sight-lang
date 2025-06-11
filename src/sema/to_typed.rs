@@ -157,7 +157,7 @@ impl Pattern {
                     ty: Type::Tuple {
                         elems: result_elems
                             .iter()
-                            .map(|e| e.get_type())
+                            .map(|e| e.ty())
                             .collect::<Vec<_>>(),
                     },
                     span: *span,
@@ -169,7 +169,7 @@ impl Pattern {
 }
 
 impl Block {
-    fn block_stmts_to_typed(
+    fn stmts_to_typed(
         ctx: Rc<Context>,
         mut stmts: &[Stmt],
         mut span: (usize, usize),
@@ -182,7 +182,7 @@ impl Block {
                 Stmt::Func(func) => bindings.push(Binding(
                     func.name.clone(),
                     Bindable::Func(Type::Arrow {
-                        lhs: Box::new(func.param.to_typed(ctx.clone())?.get_type()),
+                        lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
                         rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
                     }),
                 )),
@@ -203,17 +203,24 @@ impl Block {
                     rhs,
                     span: let_span,
                 } => {
-                    let pat = lhs.to_typed(ctx.clone())?;
-                    let ctx_with_lhs = ctx.clone().add_bindings_in_patttern(&pat);
+                    let lhs = lhs.to_typed(ctx.clone())?;
+                    let ctx_with_lhs = ctx.clone().add_bindings_in_patttern(&lhs);
                     // rhs cannot use the new bindings in lhs
                     let rhs = rhs.to_typed(ctx.clone())?;
                     // letbody can use the new bindings
-                    let body = Self::block_stmts_to_typed(ctx_with_lhs, stmts, span)?;
+                    let body = Self::stmts_to_typed(ctx_with_lhs, stmts, span)?;
                     let span = (let_span.0, body.span().1);
+                    let lhs_ty = lhs.ty();
+                    let rhs_ty = rhs.ty();
+                    let cons = ctx.add_constraint(Constraint {
+                        lhs: lhs_ty,
+                        rhs: rhs_ty,
+                    });
                     let let_expr = TExpr::Let {
-                        lhs: pat,
+                        lhs,
                         rhs: Box::new(rhs),
                         body: Box::new(body),
+                        cons,
                         span,
                     };
                     res_seq.push(let_expr);
@@ -229,7 +236,7 @@ impl Block {
                             body: func.body.to_typed(ctx.clone())?,
                             span: func.span,
                             func_ty: Type::Arrow {
-                                lhs: Box::new(func.param.to_typed(ctx.clone())?.get_type()),
+                                lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
                                 rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
                             },
                         }),
@@ -243,14 +250,14 @@ impl Block {
             }
         }
         return Ok(TExpr::Seq {
-            ty: res_seq.last().map_or(Type::Unit, |e| e.get_type()),
+            ty: res_seq.last().map_or(Type::Unit, |e| e.ty()),
             seq: res_seq,
             span: span,
         });
     }
 
     pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
-        Self::block_stmts_to_typed(ctx.clone(), &self.stmts, self.span)
+        Self::stmts_to_typed(ctx.clone(), &self.stmts, self.span)
     }
 }
 
@@ -324,8 +331,8 @@ impl Expr {
             Expr::App { func, arg, span } => {
                 let func_typed = func.to_typed(ctx.clone())?;
                 let arg_typed = arg.to_typed(ctx.clone())?;
-                let func_ty = func_typed.get_type();
-                let arg_ty = arg_typed.get_type();
+                let func_ty = func_typed.ty();
+                let arg_ty = arg_typed.ty();
                 let ret_ty = Box::new(Type::TypeVar {
                     index: ctx.fresh_var(),
                 });
@@ -336,12 +343,13 @@ impl Expr {
                         rhs: ret_ty.clone(),
                     },
                 };
-                ctx.add_constraint(constr);
+                let cons = ctx.add_constraint(constr);
                 Ok(TExpr::Application {
                     callee: Box::new(func_typed),
                     arg: Box::new(arg_typed),
                     ty: *ret_ty,
                     span: *span,
+                    cons,
                 })
             }
             Expr::Tuple { elems, span } => {
@@ -352,7 +360,7 @@ impl Expr {
                 Ok(TExpr::Tuple {
                     span: *span,
                     ty: Type::Tuple {
-                        elems: typed_elems.iter().map(|e| e.get_type()).collect(),
+                        elems: typed_elems.iter().map(|e| e.ty()).collect(),
                     },
                     elems: typed_elems,
                 })

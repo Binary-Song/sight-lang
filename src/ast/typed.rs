@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ast::{Op, TypeExpr, UnaryOp},
+    parser::context::ConstraintHandle,
     LiteralValue,
 };
 use sight_macros::LiteralValue;
@@ -56,6 +57,7 @@ pub enum Expr {
         callee: Box<Expr>,
         arg: Box<Expr>,
         ty: Type,
+        cons: ConstraintHandle,
         span: (usize, usize),
     },
     Let {
@@ -63,6 +65,7 @@ pub enum Expr {
         rhs: Box<Self>,
         body: Box<Self>,
         span: (usize, usize),
+        cons: ConstraintHandle,
     },
     Seq {
         seq: Vec<Self>,
@@ -93,11 +96,11 @@ pub enum Type {
 /// Trait and impl
 
 pub trait Typed {
-    fn get_type(&self) -> Type;
+    fn ty(&self) -> Type;
 }
 
 impl Typed for Pattern {
-    fn get_type(&self) -> Type {
+    fn ty(&self) -> Type {
         match self {
             Pattern::Unit { .. } => Type::Unit,
             Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => ty.clone(),
@@ -106,7 +109,7 @@ impl Typed for Pattern {
 }
 
 impl Typed for Lit {
-    fn get_type(&self) -> Type {
+    fn ty(&self) -> Type {
         match self {
             Lit::Unit => Type::Tuple { elems: vec![] },
             Lit::Int(_) => Type::Int,
@@ -116,7 +119,7 @@ impl Typed for Lit {
 }
 
 impl Typed for UnaryOp {
-    fn get_type(&self) -> Type {
+    fn ty(&self) -> Type {
         match self {
             UnaryOp::Neg => Type::Int,
             UnaryOp::Pos => Type::Int,
@@ -125,9 +128,9 @@ impl Typed for UnaryOp {
 }
 
 impl Typed for Expr {
-    fn get_type(&self) -> Type {
+    fn ty(&self) -> Type {
         match self {
-            Expr::Lit { value, .. } => value.get_type(),
+            Expr::Lit { value, .. } => value.ty(),
             Expr::Var { ty, .. }
             | Expr::Application { ty, .. }
             | Expr::Seq { ty, .. }

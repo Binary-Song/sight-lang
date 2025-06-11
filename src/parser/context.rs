@@ -1,3 +1,5 @@
+use sight_macros::LiteralValue;
+
 use crate::ast::typed::Type;
 use std::{
     cell::{RefCell, RefMut},
@@ -73,6 +75,14 @@ pub struct ContextIter<'a> {
     rev_index: usize,
 }
 
+/// An opaque handle to a Constraint.
+/// Currently only used to remind myself to add a Constraint
+/// when creating certain typed::Exprs, e.g. Let and App.
+/// 
+/// Thus, the wrapped usize is intentionally private and unused.
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub struct ConstraintHandle(usize);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GetResult<T: std::fmt::Debug> {
     Ok(T),
@@ -91,7 +101,7 @@ impl Context {
     }
 
     pub fn make_child(self: Rc<Self>) -> Rc<Self> {
-         self.add_bindings(vec![])
+        self.add_bindings(vec![])
     }
 
     pub fn add_binding(self: Rc<Self>, binding: Binding) -> Rc<Self> {
@@ -207,10 +217,12 @@ impl Context {
             | Context::ClosureFilter { constraints, .. } => constraints.clone(),
         }
     }
-    
-    pub fn add_constraint(&self, constraint: Constraint)
-    {
-        self.constraints().borrow_mut().push(constraint);
+
+    pub fn add_constraint(&self, constraint: Constraint) -> ConstraintHandle {
+        let cons = self.constraints();
+        let mut cons = cons.borrow_mut();
+        cons.push(constraint);
+        ConstraintHandle(cons.len() - 1)
     }
 
     pub fn next_type_var(&self) -> Rc<RefCell<u32>> {
