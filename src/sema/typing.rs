@@ -22,8 +22,63 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec;
 
-impl<'a> Context<'a> {
-    fn add_bindings_in_patttern(&self, pat: &TPattern) -> Context {
+impl<'a> Context {
+    fn new_with_builtins() -> Rc<Self> {
+        let ctx = Self::new();
+        let ctx = ctx.add_binding(Binding(
+            BinaryOp::Add.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Tuple {
+                    elems: vec![Type::Int, Type::Int],
+                }),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        let ctx = ctx.add_binding(Binding(
+            BinaryOp::Sub.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Tuple {
+                    elems: vec![Type::Int, Type::Int],
+                }),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        let ctx = ctx.add_binding(Binding(
+            BinaryOp::Mul.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Tuple {
+                    elems: vec![Type::Int, Type::Int],
+                }),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        let ctx = ctx.add_binding(Binding(
+            BinaryOp::Div.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Tuple {
+                    elems: vec![Type::Int, Type::Int],
+                }),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        let ctx = ctx.add_binding(Binding(
+            UnaryOp::Neg.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Int),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        let ctx = ctx.add_binding(Binding(
+            UnaryOp::Pos.name().to_string(),
+            Bindable::Func(Type::Arrow {
+                lhs: Box::new(Type::Int),
+                rhs: Box::new(Type::Int),
+            }),
+        ));
+        ctx
+    }
+
+    fn add_bindings_in_patttern(self: Rc<Self>, pat: &TPattern) -> Rc<Context> {
         fn collect_bindings_in_pattern(pat: &TPattern, bindings: &mut Vec<Binding>) {
             match pat {
                 TPattern::Unit { span } => {}
@@ -43,6 +98,7 @@ impl<'a> Context<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum TypingErr {
     UnboundVar { span: (usize, usize) },
 }
@@ -50,19 +106,19 @@ pub enum TypingErr {
 type TypingResult<T> = Result<T, TypingErr>;
 
 impl TypeExpr {
-    pub fn to_type(&self, ctx: &Context) -> TypingResult<Type> {
+    pub fn to_type(&self, ctx: Rc<Context>) -> TypingResult<Type> {
         match self {
             TypeExpr::Unit { .. } => Ok(Type::Unit),
             TypeExpr::Bool { .. } => Ok(Type::Bool),
             TypeExpr::Int { .. } => Ok(Type::Int),
             TypeExpr::Arrow { lhs, rhs, .. } => Ok(Type::Arrow {
-                lhs: Box::new(lhs.to_type(ctx)?),
-                rhs: Box::new(rhs.to_type(ctx)?),
+                lhs: Box::new(lhs.to_type(ctx.clone())?),
+                rhs: Box::new(rhs.to_type(ctx.clone())?),
             }),
             TypeExpr::Tuple { elems, .. } => {
                 let mut result_elems = vec![];
                 for elem in elems {
-                    result_elems.push(elem.to_type(ctx)?);
+                    result_elems.push(elem.to_type(ctx.clone())?);
                 }
                 Ok(Type::Tuple {
                     elems: result_elems,
@@ -76,7 +132,7 @@ impl TypeExpr {
 }
 
 impl Pattern {
-    fn to_typed(&self, ctx: &Context) -> TypingResult<TPattern> {
+    fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TPattern> {
         match self {
             Pattern::Unit { span } => Ok(TPattern::Unit { span: *span }),
             Pattern::Var {
@@ -91,7 +147,7 @@ impl Pattern {
             Pattern::Tuple { elems, span } => {
                 let mut result_elems = vec![];
                 for elem in elems {
-                    result_elems.push(elem.to_typed(ctx)?);
+                    result_elems.push(elem.to_typed(ctx.clone())?);
                 }
                 Ok(TPattern::Tuple {
                     elems: result_elems,
@@ -104,7 +160,7 @@ impl Pattern {
 
 impl Block {
     fn block_stmts_to_typed(
-        ctx: &Context,
+        ctx: Rc<Context>,
         mut stmts: &[Stmt],
         mut span: (usize, usize),
     ) -> TypingResult<TExpr> {
@@ -116,8 +172,8 @@ impl Block {
                 Stmt::Func(func) => bindings.push(Binding(
                     func.name.clone(),
                     Bindable::Func(Type::Arrow {
-                        lhs: Box::new(func.param.to_typed(ctx)?.get_type()),
-                        rhs: Box::new(func.ret_ty.to_type(ctx)?),
+                        lhs: Box::new(func.param.to_typed(ctx.clone())?.get_type()),
+                        rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
                     }),
                 )),
                 _ => (),
@@ -137,12 +193,12 @@ impl Block {
                     rhs,
                     span: let_span,
                 } => {
-                    let pat = lhs.to_typed(&ctx)?;
-                    let ctx_with_lhs = ctx.add_bindings_in_patttern(&pat);
+                    let pat = lhs.to_typed(ctx.clone())?;
+                    let ctx_with_lhs = ctx.clone().add_bindings_in_patttern(&pat);
                     // rhs cannot use the new bindings in lhs
-                    let rhs = rhs.to_typed(&ctx)?;
+                    let rhs = rhs.to_typed(ctx.clone())?;
                     // letbody can use the new bindings
-                    let body = Self::block_stmts_to_typed(&ctx_with_lhs, stmts, span)?;
+                    let body = Self::block_stmts_to_typed(ctx_with_lhs, stmts, span)?;
                     let span = (let_span.0, body.span().1);
                     let let_expr = TExpr::Let {
                         lhs: pat,
@@ -153,21 +209,21 @@ impl Block {
                     res_seq.push(let_expr);
                     break;
                 }
-                Stmt::Expr { expr, span } => res_seq.push(expr.to_typed(&ctx)?),
+                Stmt::Expr { expr, span } => res_seq.push(expr.to_typed(ctx.clone())?),
                 Stmt::Func(func) => {
                     let tfunc = TExpr::Func {
                         func: Rc::new(TFunc {
                             name: func.name.clone(),
-                            param: func.param.to_typed(&ctx)?,
-                            ret_ty: func.ret_ty.to_type(&ctx)?,
-                            body: func.body.to_typed(&ctx)?,
+                            param: func.param.to_typed(ctx.clone())?,
+                            ret_ty: func.ret_ty.to_type(ctx.clone())?,
+                            body: func.body.to_typed(ctx.clone())?,
                             span: func.span,
                         }),
                     };
                     res_seq.push(tfunc);
                 }
                 Stmt::Block(block) => {
-                    res_seq.push(block.to_typed(&ctx)?);
+                    res_seq.push(block.to_typed(ctx.clone())?);
                 }
                 Stmt::Empty { span } => {}
             }
@@ -178,8 +234,8 @@ impl Block {
         });
     }
 
-    pub fn to_typed(&self, ctx: &Context) -> TypingResult<TExpr> {
-        Self::block_stmts_to_typed(ctx, &self.stmts, self.span)
+    pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
+        Self::block_stmts_to_typed(ctx.clone(), &self.stmts, self.span)
     }
 }
 
@@ -195,7 +251,7 @@ impl Expr {
         }
     }
 
-    pub fn to_typed(&self, ctx: &Context) -> TypingResult<TExpr> {
+    pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
         match self {
             Expr::Unit { span } => Ok(TExpr::Lit {
                 value: TLit::Unit,
@@ -210,7 +266,7 @@ impl Expr {
                 span: *span,
             }),
             Expr::Var { name, span } => {
-                let ty = Self::find_var_by_name(name.as_str(), ctx, *span)?.get_type();
+                let ty = Self::find_var_by_name(name.as_str(), &ctx, *span)?.get_type();
                 Ok(TExpr::Var {
                     name: name.clone(),
                     span: *span,
@@ -226,7 +282,7 @@ impl Expr {
                 callee: Box::new(TExpr::Var {
                     name: op.name(),
                     span: *span,
-                    ty: Expr::find_var_by_name(op.name().as_str(), ctx, *span)?.get_type(),
+                    ty: Expr::find_var_by_name(op.name().as_str(), &ctx, *span)?.get_type(),
                 }),
                 arg: Box::new(arg.to_typed(ctx)?),
                 span: *span,
@@ -241,24 +297,24 @@ impl Expr {
                 callee: Box::new(TExpr::Var {
                     name: op.name(),
                     span: *span,
-                    ty: Expr::find_var_by_name(op.name().as_str(), ctx, *span)?.get_type(),
+                    ty: Expr::find_var_by_name(op.name().as_str(), &ctx, *span)?.get_type(),
                 }),
                 arg: Box::new(TExpr::Tuple {
-                    elems: vec![arg1.to_typed(ctx)?, arg2.to_typed(ctx)?],
+                    elems: vec![arg1.to_typed(ctx.clone())?, arg2.to_typed(ctx.clone())?],
                     span: *span,
                 }),
                 span: *span,
             }),
-            Expr::Block(block) => block.to_typed(ctx),
+            Expr::Block(block) => block.to_typed(ctx.clone()),
             Expr::App { func, arg, span } => Ok(TExpr::Application {
-                callee: Box::new(func.to_typed(ctx)?),
-                arg: Box::new(arg.to_typed(ctx)?),
+                callee: Box::new(func.to_typed(ctx.clone())?),
+                arg: Box::new(arg.to_typed(ctx.clone())?),
                 span: *span,
             }),
             Expr::Tuple { elems, span } => {
                 let mut typed_elems = vec![];
                 for elem in elems {
-                    typed_elems.push(elem.to_typed(ctx)?);
+                    typed_elems.push(elem.to_typed(ctx.clone())?);
                 }
                 Ok(TExpr::Tuple {
                     elems: typed_elems,
@@ -270,22 +326,39 @@ impl Expr {
 }
 
 #[cfg(test)]
-fn format_xml(src: &str) -> Result<String, xml::reader::Error> {
-    use xml::{reader::ParserConfig, writer::EmitterConfig};
-    let mut dest = Vec::new();
-    let reader = ParserConfig::new()
-        .trim_whitespace(true)
-        .ignore_comments(false)
-        .create_reader(src.as_bytes());
-    let mut writer = EmitterConfig::new()
-        .perform_indent(true)
-        .normalize_empty_elements(false)
-        .autopad_comments(false)
-        .create_writer(&mut dest);
-    for event in reader {
-        if let Some(event) = event?.as_writer_event() {
-            writer.write(event).unwrap();
-        }
+mod test {
+    use crate::ast::typed::Expr as TExpr;
+    use crate::ast::typed::Func as TFunc;
+    use crate::ast::typed::Lit as TLit;
+    use crate::ast::typed::Pattern as TPattern;
+    use crate::ast::typed::Type;
+    use crate::ast::typed::Typed;
+    use crate::ast::Func;
+    use crate::ast::*;
+    use crate::lexer::Lexer;
+    use crate::lexer::Token;
+    use crate::lexer::TokenType;
+    use crate::parser::context::Bindable;
+    use crate::parser::context::Binding;
+    use crate::parser::context::Context;
+    use crate::parser::context::ContextIter;
+    use crate::parser::Parser;
+    use crate::span;
+    use crate::span::Span;
+    use crate::LiteralValue;
+    use function_name::named;
+    use sight_macros::LiteralValue;
+    use std::collections::VecDeque;
+    use std::rc::Rc;
+    use std::vec;
+
+    #[test]
+    fn test_type_expr() {
+        let mut parser = Parser::new("{ let a = 1 + 1; }");
+        let expr = parser.expr().unwrap();
+        let ctx = Context::new_with_builtins();
+        println!("ctx = {ctx:?}");
+        let t = expr.to_typed(ctx.clone()).unwrap().literal_value();
+        println!("t = {t}");
     }
-    Ok(String::from_utf8(dest).unwrap())
 }

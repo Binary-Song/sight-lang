@@ -7,14 +7,13 @@ use function_name::named;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::vec;
-mod context;
-mod exprs;
-mod patterns;
-mod stmts;
+pub mod context;
+pub mod exprs;
+pub mod patterns;
+pub mod stmts;
 #[cfg(test)]
 mod testing;
-mod types;
-mod typing;
+mod type_exprs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Trial {
@@ -29,7 +28,7 @@ enum Trial {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ParseErr {
+pub enum ParseErr {
     UnexpectedToken { got: Token },
     UnexpectedTokens { got: Vec<Token> },
 }
@@ -80,7 +79,7 @@ impl<T> Drop for PropertyStack<T> {
     }
 }
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     pub lexer: Lexer<'a>,
     trials: Vec<Trial>,
     pub optional_type_anno_in_patterns: PropertyStack<bool>,

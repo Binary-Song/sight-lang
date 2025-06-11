@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
-use crate::parser::types::Prec as TypePrec;
+use crate::parser::type_exprs::Prec as TypePrec;
 use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::span::Span;

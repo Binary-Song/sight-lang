@@ -14,27 +14,53 @@ pub enum Bindable {
 pub struct Binding(pub String, pub Bindable);
 
 #[derive(Clone)]
-pub enum Context<'p> {
+pub enum Context {
     Basic {
         bindings: Vec<Binding>,
-        parent: Option<&'p Context<'p>>,
+        parent: Option<Rc<Context>>,
         next_type_var: RefCell<u32>,
     },
     FnFilter {
         filter: fn(&Binding) -> bool,
-        parent: &'p Context<'p>,
+        parent: Rc<Context>,
         next_type_var: RefCell<u32>,
     },
     ClosureFilter {
         filter: Rc<dyn Fn(&Binding) -> bool>,
-        parent: &'p Context<'p>,
+        parent: Rc<Context>,
         next_type_var: RefCell<u32>,
     },
 }
 
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Context::Basic {
+                bindings, parent, ..
+            } => {
+                write!(
+                    f,
+                    "Context::Basic {{ bindings: {:?}, parent: {:?} }}",
+                    bindings, parent
+                )
+            }
+            Context::FnFilter {
+                filter: _, parent, ..
+            } => {
+                write!(f, "Context::FnFilter {{ parent: {:?} }}", parent)
+            }
+            Context::ClosureFilter {
+                filter: _, parent, ..
+            } => {
+                write!(f, "Context::ClosureFilter {{ parent: {:?} }}", parent)
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ContextIter<'a> {
-    ctx: &'a Context<'a>,
+    ctx: &'a Context ,
     rev_index: usize,
 }
 
@@ -45,53 +71,53 @@ pub enum GetResult<T: std::fmt::Debug> {
     OutOfBounds,
 }
 
-impl<'a> Context<'a> {
-    pub fn new() -> Context<'a> {
-        Context::Basic {
+impl Context {
+    pub fn new() -> Rc<Self>  {
+        Rc::new(Context::Basic {
             bindings: vec![],
             parent: None,
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
-    pub fn make_child(&'a self) -> Context<'a> {
-        Context::Basic {
+    pub fn make_child(self: Rc<Self>) -> Rc<Self>  {
+        Rc::new(Context::Basic {
             bindings: vec![],
             parent: Some(self),
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
-    pub fn add_binding(&self, binding: Binding) -> Context {
-        Context::Basic {
+    pub fn add_binding(self: Rc<Self>, binding: Binding) -> Rc<Self> {
+        Rc::new(Context::Basic {
             bindings: vec![binding],
             parent: Some(self),
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
-    pub fn add_bindings(&self, bindings: Vec<Binding>) -> Context {
-        Context::Basic {
+    pub fn add_bindings(self: Rc<Self>, bindings: Vec<Binding>) -> Rc<Self> {
+        Rc::new(Context::Basic {
             bindings,
             parent: Some(self),
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
-    pub fn add_fn_filter(&self, filter: fn(&Binding) -> bool) -> Context {
-        Context::FnFilter {
+    pub fn add_fn_filter(self: Rc<Self>, filter: fn(&Binding) -> bool) -> Rc<Self> {
+        Rc::new(Context::FnFilter {
             filter,
             parent: self,
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
-    pub fn add_closure_filter(&self, filter: Rc<dyn Fn(&Binding) -> bool>) -> Context {
-        Context::ClosureFilter {
+    pub fn add_closure_filter(self: Rc<Self>, filter: Rc<dyn Fn(&Binding) -> bool>) -> Rc<Self> {
+        Rc::new(Context::ClosureFilter {
             filter,
             parent: self,
             next_type_var: RefCell::new(0),
-        }
+        })
     }
 
     /// Create an iterator that iterates over `&Binding` s
@@ -108,7 +134,7 @@ impl<'a> Context<'a> {
                 bindings, parent, ..
             } => {
                 if rev_index < bindings.len() {
-                    let item =  bindings.get(bindings.len() - 1 - rev_index );
+                    let item = bindings.get(bindings.len() - 1 - rev_index);
                     GetResult::Ok(item.unwrap())
                 } else {
                     match parent {
@@ -147,7 +173,7 @@ impl<'a> Context<'a> {
         match self {
             Context::Basic {
                 bindings, parent, ..
-            } => bindings.len() + parent.map_or(0, |p| p.len()),
+            } => bindings.len() + parent.as_ref().map_or(0, |p| p.len()),
             Context::FnFilter { parent, .. } => parent.len(),
             Context::ClosureFilter { parent, .. } => parent.len(),
         }
@@ -183,7 +209,7 @@ impl<'a> Iterator for ContextIter<'a> {
     }
 }
 
-impl<'a> IntoIterator for &'a Context<'a> {
+impl<'a> IntoIterator for &'a Context {
     type IntoIter = ContextIter<'a>;
     type Item = &'a Binding;
     fn into_iter(self) -> Self::IntoIter {
@@ -200,7 +226,7 @@ impl Bindable {
     }
 }
 
-impl<'a> Context<'a> {
+impl<'a> Context  {
     pub fn next_type_var(&self) -> RefMut<'_, u32> {
         match self {
             Context::Basic { next_type_var, .. }

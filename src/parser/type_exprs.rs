@@ -6,7 +6,6 @@ use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::span::Span;
 use function_name::named;
-pub use lalrpop_util::lalrpop_mod;
 use std::collections::VecDeque;
 use std::vec;
 use tracing::instrument;

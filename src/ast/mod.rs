@@ -11,8 +11,8 @@ pub enum UnaryOp {
 impl UnaryOp {
     pub fn name(&self) -> String {
         match self {
-            UnaryOp::Pos => "UnaryOp::Pos `+`".to_string(),
-            UnaryOp::Neg => "UnaryOp::Neg `-`".to_string(),
+            UnaryOp::Pos => "UnaryOp::Pos(+)".to_string(),
+            UnaryOp::Neg => "UnaryOp::Neg(-)".to_string(),
         }
     }
 }
@@ -22,18 +22,15 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
-    // Binary-Seq
-    Seq,
 }
 
 impl BinaryOp {
     pub fn name(&self) -> String {
         match self {
-            BinaryOp::Add => "BinaryOp::Add `+`".to_string(),
-            BinaryOp::Sub => "BinaryOp::Sub `-`".to_string(),
-            BinaryOp::Mul => "BinaryOp::Mul `*`".to_string(),
-            BinaryOp::Div => "BinaryOp::Div `/`".to_string(),
-            BinaryOp::Seq => "BinaryOp::Seq `;`".to_string(),
+            BinaryOp::Add => "BinaryOp::Add(+)".to_string(),
+            BinaryOp::Sub => "BinaryOp::Sub(-)".to_string(),
+            BinaryOp::Mul => "BinaryOp::Mul(*)".to_string(),
+            BinaryOp::Div => "BinaryOp::Div(/)".to_string(),
         }
     }
 }
@@ -78,7 +75,6 @@ pub enum Expr {
         name: String,
         span: (usize, usize),
     },
-    // todo: support for overloading, when args have MUTUALLY EXCLUSIVE types
     UnaryOp {
         op: UnaryOp,
         arg: Box<Self>,
