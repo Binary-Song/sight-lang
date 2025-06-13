@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
         let is_type_opt = self.optional_type_anno_in_patterns.value();
 
         if is_type_opt {
-            self.ll1_try_parse(&[&type_anno_parser, &|parser: &mut Self| {
+            self.ll1_try_parse(&[&type_anno_parser, &|_parser: &mut Self| {
                 Ok(Pattern::Var {
                     name: name.clone(),
                     ty: None,

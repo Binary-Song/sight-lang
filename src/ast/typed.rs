@@ -1,9 +1,7 @@
-use std::rc::Rc;
 
 use crate::{
-    ast::{Op, TypeExpr, UnaryOp},
+    ast::UnaryOp,
     parser::context::ConstraintHandle,
-    LiteralValue,
 };
 use sight_macros::LiteralValue;
 

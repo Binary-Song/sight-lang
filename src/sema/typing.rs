@@ -5,22 +5,13 @@ use crate::ast::typed::Pattern as TPattern;
 use crate::ast::typed::Type;
 use crate::ast::typed::Typed;
 use crate::ast::visitor::Visitor;
-use crate::ast::Func;
 use crate::ast::*;
-use crate::lexer::Lexer;
-use crate::lexer::Token;
-use crate::lexer::TokenType;
 use crate::parser::context::Bindable;
 use crate::parser::context::Binding;
 use crate::parser::context::Constraint;
 use crate::parser::context::ConstraintKind;
 use crate::parser::context::Context;
-use crate::parser::context::ContextIter;
-use crate::parser::Parser;
-use crate::span;
 use crate::span::Span;
-use function_name::named;
-use sight_macros::LiteralValue;
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::fs::OpenOptions;
@@ -73,7 +64,7 @@ impl<'a> Context {
     fn add_bindings_in_patttern(self: Rc<Self>, pat: &TPattern) -> Rc<Context> {
         fn collect_bindings_in_pattern(pat: &TPattern, bindings: &mut Vec<Binding>) {
             match pat {
-                TPattern::Unit { span } => {}
+                TPattern::Unit { .. } => {}
                 TPattern::Var { name, ty, .. } => {
                     bindings.push(Binding(name.clone(), Bindable::Var(ty.clone())));
                 }
@@ -216,7 +207,7 @@ impl Block {
                     res_seq.push(let_expr);
                     break;
                 }
-                Stmt::Expr { expr, span } => {
+                Stmt::Expr { expr, .. } => {
                     res_seq.push(expr.to_typed_with_unsolved_constraints(ctx.clone())?)
                 }
                 Stmt::Func(func) => {
@@ -238,7 +229,7 @@ impl Block {
                 Stmt::Block(block) => {
                     res_seq.push(block.to_typed(ctx.clone())?);
                 }
-                Stmt::Empty { span } => {}
+                Stmt::Empty { .. } => {}
             }
         }
         return Ok(TExpr::Seq {
@@ -401,7 +392,7 @@ impl Substitution {
     }
 
     pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
-        ast.accept(self);
+        let _ = ast.accept(self);
     }
 }
 
@@ -428,7 +419,7 @@ impl Substitutions {
     }
 
     pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
-        ast.accept(self);
+        let _ = ast.accept(self);
     }
 
     pub fn pop(&mut self) -> Option<Substitution> {
@@ -540,15 +531,15 @@ impl crate::ast::Expr {
 mod testing {
     use crate::ast::typed::{self, Typed};
     use crate::ast::visitor::Visitor;
-    use crate::ast::AST;
+
     use crate::parser::context::{ConstraintHandle, Context};
     use crate::parser::Parser;
     use crate::sema::typing::unify_constraints;
     use crate::LiteralValue;
 
-    struct TypePrinter {}
+    struct _TypePrinter {}
 
-    impl Visitor<()> for TypePrinter {
+    impl Visitor<()> for _TypePrinter {
         fn visit_texpr(&self, expr: &mut crate::ast::typed::Expr) -> Result<(), ()> {
             println!("type of {expr} is {ty}", expr = expr, ty = expr.ty());
             Ok(())

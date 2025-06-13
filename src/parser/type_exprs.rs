@@ -1,5 +1,4 @@
 use crate::ast::*;
-use crate::lexer::Lexer;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::ParseErr;
@@ -7,8 +6,6 @@ use crate::parser::Parser;
 use crate::span::Span;
 use function_name::named;
 use sight_macros::NumConv;
-use std::collections::VecDeque;
-use std::vec;
 use tracing::instrument;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
@@ -72,7 +69,7 @@ impl<'a> Parser<'a> {
     fn arrow_type_expr(&mut self) -> Result<TypeExpr, ParseErr> {
         let rule = function_name!();
         let parse_operand = |s: &mut Self| s.type_expr_with_max_prec(Prec::Arrow.sub_by_one());
-        let combine_operands = |lhs: TypeExpr, rhs: TypeExpr, tok| -> TypeExpr {
+        let combine_operands = |lhs: TypeExpr, rhs: TypeExpr, _tok| -> TypeExpr {
             let span = (lhs.span().0, rhs.span().1);
             TypeExpr::Arrow {
                 lhs: Box::new(lhs),

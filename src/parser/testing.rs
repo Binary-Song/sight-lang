@@ -114,7 +114,6 @@ mod cases {
     use super::assert_parse_expr;
     use crate::ast::*;
     use crate::ast::Expr;
-    use std::rc::Rc;
 
     #[test]
     fn test_var() {

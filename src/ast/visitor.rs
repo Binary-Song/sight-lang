@@ -1,34 +1,33 @@
-use std::rc::Rc;
 
 use crate::ast::AST;
 
 pub trait Visitor<E> {
-    fn visit_expr(&self, expr: &mut crate::ast::Expr) -> Result<(), E> {
+    fn visit_expr(&self, _: &mut crate::ast::Expr) -> Result<(), E> {
         Ok(())
     }
 
-    fn visit_stmt(&self, stmt: &mut crate::ast::Stmt) -> Result<(), E> {
+    fn visit_stmt(&self, _: &mut crate::ast::Stmt) -> Result<(), E> {
         Ok(())
     }
 
-    fn visit_pat(&self, pat: &mut crate::ast::Pattern) -> Result<(), E> {
+    fn visit_pat(&self, _: &mut crate::ast::Pattern) -> Result<(), E> {
         Ok(())
     }
 
-    fn visit_type_expr(&self, ty: &mut crate::ast::TypeExpr) -> Result<(), E> {
+    fn visit_type_expr(&self, _: &mut crate::ast::TypeExpr) -> Result<(), E> {
         Ok(())
     }
 
     // typed AST
-    fn visit_texpr(&self, expr: &mut crate::ast::typed::Expr) -> Result<(), E> {
+    fn visit_texpr(&self, _: &mut crate::ast::typed::Expr) -> Result<(), E> {
         Ok(())
     }
 
-    fn visit_tpat(&self, pat: &mut crate::ast::typed::Pattern) -> Result<(), E> {
+    fn visit_tpat(&self, _: &mut crate::ast::typed::Pattern) -> Result<(), E> {
         Ok(())
     }
 
-    fn visit_ttype(&self, ty: &mut crate::ast::typed::Type) -> Result<(), E> {
+    fn visit_ttype(&self, _: &mut crate::ast::typed::Type) -> Result<(), E> {
         Ok(())
     }
 }

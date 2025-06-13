@@ -7,7 +7,7 @@ use crate::parser::PeekerResult;
 use crate::span::Span;
 use function_name::named;
 use sight_macros::NumConv;
-use tracing::{info, instrument};
+use tracing::{instrument};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
 pub enum Prec {
@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
                 }
             }
         };
-        let tokens = self.expect_any_with_peeker(&mut peeker, "unit", "unit")?;
+        let tokens = self.expect_any_with_peeker(&mut peeker, "unit", function_name!())?;
         Ok((tokens[0].span().0, tokens.last().unwrap().span().1))
     }
 
@@ -96,7 +96,6 @@ impl<'a> Parser<'a> {
         self.ll1_try_parse(parsers)
     }
 
-    #[named]
     #[instrument(ret)]
     fn app(&mut self) -> Result<Expr, ParseErr> {
         let parsers: &[&dyn Fn(&mut Self) -> Result<Expr, ParseErr>] = &[
@@ -215,7 +214,7 @@ impl display::WithPrec<crate::parser::exprs::Prec> for Expr {
             Expr::Int { .. } => None,
             Expr::Bool { .. } => None,
             Expr::Var { .. } => None,
-            Expr::UnaryOp { op, .. } => todo!(),
+            Expr::UnaryOp {  .. } => todo!(),
             Expr::BinaryOp { op, .. } => Some(op.prec()),
             Expr::App { .. } => Some(Prec::App),
             Expr::Tuple { .. } => Some(Prec::Tuple),

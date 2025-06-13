@@ -4,7 +4,7 @@ pub mod visitor;
 
 use crate::{ast::visitor::Visitor, parser::exprs::Prec};
 use sight_macros::LiteralValue;
-use std::{fmt::Debug, rc::Rc};
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum UnaryOp {

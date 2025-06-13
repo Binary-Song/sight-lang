@@ -1,8 +1,7 @@
-use sight_macros::LiteralValue;
 
 use crate::{ast::typed::Type, LiteralValue};
 use std::{
-    cell::{RefCell, RefMut},
+    cell::{RefCell, },
     rc::Rc,
 };
 

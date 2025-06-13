@@ -2,9 +2,6 @@ use crate::ast::*;
 use crate::lexer::Lexer;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
-use crate::span::Span;
-use function_name::named;
-use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::vec;
 pub mod context;
@@ -64,10 +61,7 @@ impl<T: Clone> PropertyStack<T> {
             .map(|x| x.clone())
             .unwrap_or(self.bottom.clone())
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.stack.is_empty()
-    }
+ 
 }
 
 impl<T> Drop for PropertyStack<T> {
@@ -83,7 +77,7 @@ impl<T> Drop for PropertyStack<T> {
 pub struct Parser<'a> {
     pub lexer: Lexer<'a>,
     trials: Vec<Trial>,
-    pub optional_type_anno_in_patterns: PropertyStack<bool>,
+    optional_type_anno_in_patterns: PropertyStack<bool>,
 }
 
 pub enum PeekerResult {
@@ -219,7 +213,7 @@ impl<'a> Parser<'a> {
     ) -> Result<TRes, ParseErr> {
         let mut lhs = parse_operand(self)?;
         loop {
-            if let Ok(op_token) = self.expect_any(op_token_types, rule.clone()) {
+            if let Ok(op_token) = self.expect_any(op_token_types, rule) {
                 let rhs = parse_operand(self)?;
                 lhs = combine_operands(lhs, rhs, op_token);
             } else {
@@ -256,7 +250,7 @@ impl<'a> Parser<'a> {
         let mut operands = vec![];
         operands.push(parse_operand(self)?);
         loop {
-            if let Ok(_) = self.expect(op_token_type.clone(), rule.clone()) {
+            if let Ok(_) = self.expect(op_token_type.clone(), rule) {
                 operands.push(parse_operand(self)?);
             } else {
                 break;

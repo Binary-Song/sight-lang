@@ -1,4 +1,3 @@
-use std::fmt::format;
 
 pub trait LiteralValue {
     fn literal_value(&self) -> String;

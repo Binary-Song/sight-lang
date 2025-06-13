@@ -98,7 +98,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// 返回当前位置的字符，越界返回 '\0'，非法UTF-8返回 '\u{FFFD}'
     pub fn peek_char(&self) -> char {
         if self.pos >= self.input.len() {
             '\0'
@@ -108,11 +107,9 @@ impl<'a> Lexer<'a> {
             match std::str::from_utf8(s) {
                 Ok(s) => s.chars().next().unwrap_or('\0'),
                 Err(e) => {
-                    if let Some(invalid_idx) = e.error_len() {
-                        // 立即遇到非法字节
+                    if let Some(_) = e.error_len() {
                         '\u{FFFD}'
                     } else {
-                        // 不完整的UTF-8序列
                         '\u{FFFD}'
                     }
                 }
@@ -135,9 +132,7 @@ impl<'a> Lexer<'a> {
                     self.pos += c.len_utf8();
                     c
                 }
-                Err(e) => {
-                    // 非法UTF-8字节
-                    let bad = bytes[self.pos];
+                Err(_) => {
                     self.pos += 1;
                     '\u{FFFD}'
                 }
@@ -420,7 +415,6 @@ impl TokenType {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use pretty_assertions::assert_ne;
 
     fn lex_all(input: &str) -> Vec<Token> {
         let mut lexer = Lexer::new(input);

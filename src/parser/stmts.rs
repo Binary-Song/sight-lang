@@ -1,12 +1,8 @@
-use crate::ast::*;
-use crate::lexer::Lexer;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::*;
 use crate::span::Span;
 use function_name::named;
-use std::collections::VecDeque;
-use std::rc::Rc;
 use std::vec;
 use tracing::instrument;
 
