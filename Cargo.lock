@@ -331,7 +331,6 @@ dependencies = [
  "pretty_assertions",
  "regex",
  "sight-macros",
- "sight-utils",
  "tracing",
  "tracing-subscriber",
  "xml-rs",
@@ -343,13 +342,6 @@ version = "0.1.0"
 dependencies = [
  "quote",
  "syn",
-]
-
-[[package]]
-name = "sight-utils"
-version = "0.1.0"
-dependencies = [
- "regex",
 ]
 
 [[package]]
