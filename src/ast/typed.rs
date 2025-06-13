@@ -78,7 +78,7 @@ pub enum Expr {
         span: (usize, usize),
     },
     Func {
-        func: Rc<Func>,
+        func: Box<Func>,
     },
 }
 
@@ -97,6 +97,7 @@ pub enum Type {
 
 pub trait Typed {
     fn ty(&self) -> Type;
+    fn mut_ty(&mut self) -> Option<&mut Type>;
 }
 
 impl Typed for Pattern {
@@ -104,6 +105,13 @@ impl Typed for Pattern {
         match self {
             Pattern::Unit { .. } => Type::Unit,
             Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => ty.clone(),
+        }
+    }
+    fn mut_ty(&mut self) -> Option<&mut Type>
+    {
+        match self {
+            Pattern::Unit { .. } => None,
+            Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => Some(ty),
         }
     }
 }
@@ -116,6 +124,9 @@ impl Typed for Lit {
             Lit::Bool(_) => Type::Bool,
         }
     }
+    fn mut_ty(&mut self) -> Option<&mut Type> {
+        None // Literals do not have mutable types
+    }
 }
 
 impl Typed for UnaryOp {
@@ -124,6 +135,9 @@ impl Typed for UnaryOp {
             UnaryOp::Neg => Type::Int,
             UnaryOp::Pos => Type::Int,
         }
+    }
+    fn mut_ty(&mut self) -> Option<&mut Type> {
+        None // Unary operations do not have mutable types
     }
 }
 
@@ -136,6 +150,16 @@ impl Typed for Expr {
             | Expr::Seq { ty, .. }
             | Expr::Tuple { ty, .. } => ty.clone(),
             Expr::Let { .. } | Expr::Func { .. } => Type::Unit,
+        }
+    }
+    fn mut_ty(&mut self) -> Option<&mut Type> {
+        match self {
+            Expr::Lit { .. } => None,
+            Expr::Var { ty, .. }
+            | Expr::Application { ty, .. }
+            | Expr::Seq { ty, .. }
+            | Expr::Tuple { ty, .. } => Some(ty),
+            Expr::Let { .. } | Expr::Func { .. } => None,
         }
     }
 }

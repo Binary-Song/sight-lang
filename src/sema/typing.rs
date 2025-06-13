@@ -4,6 +4,7 @@ use crate::ast::typed::Lit as TLit;
 use crate::ast::typed::Pattern as TPattern;
 use crate::ast::typed::Type;
 use crate::ast::typed::Typed;
+use crate::ast::visitor::Visitor;
 use crate::ast::Func;
 use crate::ast::*;
 use crate::lexer::Lexer;
@@ -12,6 +13,7 @@ use crate::lexer::TokenType;
 use crate::parser::context::Bindable;
 use crate::parser::context::Binding;
 use crate::parser::context::Constraint;
+use crate::parser::context::ConstraintKind;
 use crate::parser::context::Context;
 use crate::parser::context::ContextIter;
 use crate::parser::Parser;
@@ -20,6 +22,9 @@ use crate::span::Span;
 use function_name::named;
 use sight_macros::LiteralValue;
 use std::collections::VecDeque;
+use std::fmt::Display;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::rc::Rc;
 use std::vec;
 
@@ -62,20 +67,6 @@ impl<'a> Context {
                 rhs: Box::new(Type::Int),
             }),
         ));
-        let ctx = ctx.add_binding(Binding(
-            UnaryOp::Neg.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Int),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
-        let ctx = ctx.add_binding(Binding(
-            UnaryOp::Pos.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Int),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
         ctx
     }
 
@@ -102,9 +93,10 @@ impl<'a> Context {
 #[derive(Debug)]
 pub enum TypingErr {
     UnboundVar { span: (usize, usize) },
+    ErrorMsg(String),
 }
 
-type TypingResult<T> = Result<T, TypingErr>;
+pub type TypingResult<T> = Result<T, TypingErr>;
 
 impl TypeExpr {
     pub fn to_type(&self, ctx: Rc<Context>) -> TypingResult<Type> {
@@ -155,10 +147,7 @@ impl Pattern {
                 }
                 Ok(TPattern::Tuple {
                     ty: Type::Tuple {
-                        elems: result_elems
-                            .iter()
-                            .map(|e| e.ty())
-                            .collect::<Vec<_>>(),
+                        elems: result_elems.iter().map(|e| e.ty()).collect::<Vec<_>>(),
                     },
                     span: *span,
                     elems: result_elems,
@@ -206,7 +195,7 @@ impl Block {
                     let lhs = lhs.to_typed(ctx.clone())?;
                     let ctx_with_lhs = ctx.clone().add_bindings_in_patttern(&lhs);
                     // rhs cannot use the new bindings in lhs
-                    let rhs = rhs.to_typed(ctx.clone())?;
+                    let rhs = rhs.to_typed_with_unsolved_constraints(ctx.clone())?;
                     // letbody can use the new bindings
                     let body = Self::stmts_to_typed(ctx_with_lhs, stmts, span)?;
                     let span = (let_span.0, body.span().1);
@@ -215,6 +204,7 @@ impl Block {
                     let cons = ctx.add_constraint(Constraint {
                         lhs: lhs_ty,
                         rhs: rhs_ty,
+                        kind: ConstraintKind::Let,
                     });
                     let let_expr = TExpr::Let {
                         lhs,
@@ -226,14 +216,16 @@ impl Block {
                     res_seq.push(let_expr);
                     break;
                 }
-                Stmt::Expr { expr, span } => res_seq.push(expr.to_typed(ctx.clone())?),
+                Stmt::Expr { expr, span } => {
+                    res_seq.push(expr.to_typed_with_unsolved_constraints(ctx.clone())?)
+                }
                 Stmt::Func(func) => {
                     let tfunc = TExpr::Func {
-                        func: Rc::new(TFunc {
+                        func: Box::new(TFunc {
                             name: func.name.clone(),
                             param: func.param.to_typed(ctx.clone())?,
                             ret_ty: func.ret_ty.to_type(ctx.clone())?,
-                            body: func.body.to_typed(ctx.clone())?,
+                            body: func.body.to_typed_with_unsolved_constraints(ctx.clone())?,
                             span: func.span,
                             func_ty: Type::Arrow {
                                 lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
@@ -273,7 +265,7 @@ impl Expr {
         }
     }
 
-    pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
+    pub fn to_typed_with_unsolved_constraints(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
         match self {
             Expr::Unit { span } => Ok(TExpr::Lit {
                 value: TLit::Unit,
@@ -289,6 +281,13 @@ impl Expr {
             }),
             Expr::Var { name, span } => {
                 let ty = Self::find_var_by_name(name.as_str(), &ctx, *span)?.get_type();
+                if let Ok(mut file) = OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open("E:/sight-lang/1.txt")
+                {
+                    let _ = writeln!(file, "Found var {name} with type {ty:?}");
+                }
                 Ok(TExpr::Var {
                     name: name.clone(),
                     span: *span,
@@ -308,7 +307,7 @@ impl Expr {
                 arg: arg.clone(),
                 span: span.clone(),
             }
-            .to_typed(ctx.clone())?),
+            .to_typed_with_unsolved_constraints(ctx.clone())?),
             Expr::BinaryOp {
                 op,
                 lhs: arg1,
@@ -326,11 +325,11 @@ impl Expr {
                 }),
                 span: *span,
             }
-            .to_typed(ctx.clone())?),
+            .to_typed_with_unsolved_constraints(ctx.clone())?),
             Expr::Block(block) => block.to_typed(ctx.clone()),
             Expr::App { func, arg, span } => {
-                let func_typed = func.to_typed(ctx.clone())?;
-                let arg_typed = arg.to_typed(ctx.clone())?;
+                let func_typed = func.to_typed_with_unsolved_constraints(ctx.clone())?;
+                let arg_typed = arg.to_typed_with_unsolved_constraints(ctx.clone())?;
                 let func_ty = func_typed.ty();
                 let arg_ty = arg_typed.ty();
                 let ret_ty = Box::new(Type::TypeVar {
@@ -342,6 +341,7 @@ impl Expr {
                         lhs: Box::new(arg_ty),
                         rhs: ret_ty.clone(),
                     },
+                    kind: ConstraintKind::App,
                 };
                 let cons = ctx.add_constraint(constr);
                 Ok(TExpr::Application {
@@ -355,7 +355,7 @@ impl Expr {
             Expr::Tuple { elems, span } => {
                 let mut typed_elems = vec![];
                 for elem in elems {
-                    typed_elems.push(elem.to_typed(ctx.clone())?);
+                    typed_elems.push(elem.to_typed_with_unsolved_constraints(ctx.clone())?);
                 }
                 Ok(TExpr::Tuple {
                     span: *span,
@@ -367,45 +367,310 @@ impl Expr {
             }
         }
     }
+
+    pub fn to_typed(&self) -> TypingResult<TExpr> {
+        let ctx = Context::new_with_builtins();
+        let mut expr = self.to_typed_with_unsolved_constraints(ctx.clone())?;
+        let mut constraints: std::collections::VecDeque<_> =
+            ctx.constraints().borrow().clone().into_iter().collect();
+        let subs = unify_constraints(&mut constraints)?;
+        subs.apply_to_ast(&mut expr);
+        Ok(expr)
+    }
+}
+
+#[derive(Debug)]
+pub struct Substitution {
+    pub from: u32,
+    pub to: Type,
+}
+
+#[derive(Debug)]
+pub struct Substitutions {
+    pub subs: Vec<Substitution>,
+}
+
+impl Substitution {
+    pub fn apply_to_type_var(&self, ty: &mut Type) {
+        match ty {
+            Type::TypeVar { index } if *index == self.from => {
+                *ty = self.to.clone();
+            }
+            _ => (),
+        }
+    }
+
+    pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
+        ast.accept(self);
+    }
+}
+
+impl Visitor<()> for Substitution {
+    fn visit_ttype(&self, ty: &mut Type) -> Result<(), ()> {
+        self.apply_to_type_var(ty);
+        Ok(())
+    }
+}
+
+impl Substitutions {
+    pub fn new() -> Self {
+        Self { subs: Vec::new() }
+    }
+
+    pub fn add(&mut self, subs: Substitution) {
+        self.subs.push(subs);
+    }
+
+    pub fn apply_to_type(&self, ty: &mut Type) {
+        for sub in &self.subs {
+            sub.apply_to_ast(ty);
+        }
+    }
+
+    pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
+        ast.accept(self);
+    }
+
+    pub fn pop(&mut self) -> Option<Substitution> {
+        self.subs.pop()
+    }
+}
+
+impl Visitor<()> for Substitutions {
+    fn visit_ttype(&self, ty: &mut typed::Type) -> Result<(), ()> {
+        self.apply_to_type(ty);
+        Ok(())
+    }
+}
+
+pub fn unify_constraints(
+    constraints: &mut VecDeque<Constraint>,
+) -> Result<Substitutions, TypingErr> {
+    fn occurs(var_index: u32, ty: &Type) -> bool {
+        match ty {
+            Type::TypeVar { index } if *index == var_index => true,
+            Type::Arrow { lhs, rhs } => occurs(var_index, lhs) || occurs(var_index, rhs),
+            Type::Tuple { elems } => elems.iter().any(|e| occurs(var_index, e)),
+            _ => false,
+        }
+    }
+
+    let mut subs = Substitutions::new();
+    while let Some(constraint) = constraints.pop_front() {
+        match (constraint.lhs, constraint.rhs) {
+            (Type::TypeVar { index: var_index }, other)
+            | (other, Type::TypeVar { index: var_index })
+                if !occurs(var_index, &other) =>
+            {
+                // If the variable does not occur in the other type, we can substitute it
+                let sub = Substitution {
+                    from: var_index,
+                    to: other.clone(),
+                };
+                // Apply the substitution to all remaining constraints
+                for c in constraints.iter_mut() {
+                    sub.apply_to_ast(&mut c.lhs);
+                    sub.apply_to_ast(&mut c.rhs);
+                }
+                subs.add(sub);
+            }
+            (
+                Type::Arrow {
+                    lhs: lhs1,
+                    rhs: rhs1,
+                },
+                Type::Arrow {
+                    lhs: lhs2,
+                    rhs: rhs2,
+                },
+            ) => {
+                // Unify the left-hand sides and right-hand sides of the arrows
+                constraints.push_back(Constraint {
+                    lhs: *lhs1,
+                    rhs: *lhs2,
+                    kind: ConstraintKind::Unify,
+                });
+                constraints.push_back(Constraint {
+                    lhs: *rhs1,
+                    rhs: *rhs2,
+                    kind: ConstraintKind::Unify,
+                });
+            }
+            (Type::Tuple { elems: elems1 }, Type::Tuple { elems: elems2 }) => {
+                // Unify the elements of the tuples
+                if elems1.len() != elems2.len() {
+                    return Err(TypingErr::ErrorMsg(format!(
+                        "Cannot unify tuples of different lengths: {} and {}",
+                        elems1.len(),
+                        elems2.len()
+                    )));
+                }
+                for (e1, e2) in elems1.iter().zip(elems2.iter()) {
+                    constraints.push_back(Constraint {
+                        lhs: e1.clone(),
+                        rhs: e2.clone(),
+                        kind: ConstraintKind::Unify,
+                    });
+                }
+            }
+            (lhs, rhs) if lhs == rhs => {
+                // If the types are equal, we can ignore this constraint
+                continue;
+            }
+            (lhs, rhs) => {
+                // If we reach here, we have an unresolvable constraint
+                return Err(TypingErr::ErrorMsg(format!(
+                    "Cannot unify types: {} and {}",
+                    lhs, rhs
+                )));
+            }
+        }
+    }
+    Ok(subs)
+}
+
+impl crate::ast::Expr {
+    // pub fn to_typed(&self) -> crate::ast::typed::Expr
+    // {
+
+    // }
 }
 
 #[cfg(test)]
-mod test {
-    use crate::ast::typed::Expr as TExpr;
-    use crate::ast::typed::Func as TFunc;
-    use crate::ast::typed::Lit as TLit;
-    use crate::ast::typed::Pattern as TPattern;
-    use crate::ast::typed::Type;
-    use crate::ast::typed::Typed;
-    use crate::ast::Func;
-    use crate::ast::*;
-    use crate::lexer::Lexer;
-    use crate::lexer::Token;
-    use crate::lexer::TokenType;
-    use crate::parser::context::Bindable;
-    use crate::parser::context::Binding;
-    use crate::parser::context::Context;
-    use crate::parser::context::ContextIter;
+mod testing {
+    use crate::ast::typed::{self, Typed};
+    use crate::ast::visitor::Visitor;
+    use crate::ast::AST;
+    use crate::parser::context::{ConstraintHandle, Context};
     use crate::parser::Parser;
-    use crate::span;
-    use crate::span::Span;
+    use crate::sema::typing::unify_constraints;
     use crate::LiteralValue;
-    use function_name::named;
-    use sight_macros::LiteralValue;
-    use std::collections::VecDeque;
-    use std::rc::Rc;
-    use std::vec;
+
+    struct TypePrinter {}
+
+    impl Visitor<()> for TypePrinter {
+        fn visit_texpr(&self, expr: &mut crate::ast::typed::Expr) -> Result<(), ()> {
+            println!("type of {expr} is {ty}", expr = expr, ty = expr.ty());
+            Ok(())
+        }
+    }
+
+    fn test_type_inference_result(src: &'static str, typed_expr: typed::Expr) {
+        // "{ let b = (1, 1); let (c, d) = b;  }"
+        let mut parser = Parser::new(src);
+        let expr = parser.expr().unwrap();
+        let ctx = Context::new_with_builtins();
+        let mut expr = expr
+            .to_typed_with_unsolved_constraints(ctx.clone())
+            .unwrap();
+        let mut constraints: std::collections::VecDeque<_> =
+            ctx.constraints().borrow().clone().into_iter().collect();
+        let subs = unify_constraints(&mut constraints).unwrap();
+        subs.apply_to_ast(&mut expr);
+        println!("typed expr after = {expr}", expr = expr.literal_value());
+        assert_eq!(expr, typed_expr);
+    }
 
     #[test]
     fn test_type_expr() {
-        let mut parser = Parser::new("{ let a = 1; a + 1 }");
-        let expr = parser.expr().unwrap();
-        let ctx = Context::new_with_builtins();
-        println!("ctx = {ctx:?}");
-        let t = expr.to_typed(ctx.clone()).unwrap().literal_value();
-        println!("tree = {t}");
-        for constraint in ctx.constraints().borrow().iter() {
-            println!("constraint: {:?} == {:?}", constraint.lhs, constraint.rhs);
+        use typed::*;
+        test_type_inference_result(
+            "{ let b = (1, 1); let (c, d) = b;  }",
+            Expr::Seq {
+                seq: vec![Expr::Let {
+                    lhs: Pattern::Var {
+                        name: "b".to_string(),
+                        ty: Type::Tuple {
+                            elems: vec![Type::Int, Type::Int],
+                        },
+                        span: (6, 7),
+                    },
+                    rhs: Box::new(Expr::Tuple {
+                        elems: vec![
+                            Expr::Lit {
+                                value: Lit::Int(1),
+                                span: (11, 12),
+                            },
+                            Expr::Lit {
+                                value: Lit::Int(1),
+                                span: (14, 15),
+                            },
+                        ],
+                        ty: Type::Tuple {
+                            elems: vec![Type::Int, Type::Int],
+                        },
+                        span: (11, 15),
+                    }),
+                    body: Box::new(Expr::Seq {
+                        seq: vec![Expr::Let {
+                            lhs: Pattern::Tuple {
+                                elems: vec![
+                                    Pattern::Var {
+                                        name: "c".to_string(),
+                                        ty: Type::Int,
+                                        span: (23, 24),
+                                    },
+                                    Pattern::Var {
+                                        name: "d".to_string(),
+                                        ty: Type::Int,
+                                        span: (26, 27),
+                                    },
+                                ],
+                                ty: Type::Tuple {
+                                    elems: vec![Type::Int, Type::Int],
+                                },
+                                span: (23, 27),
+                            },
+                            rhs: Box::new(Expr::Var {
+                                name: "b".to_string(),
+                                span: (31, 32),
+                                ty: Type::Tuple {
+                                    elems: vec![Type::Int, Type::Int],
+                                },
+                            }),
+                            body: Box::new(Expr::Seq {
+                                seq: vec![Expr::Lit {
+                                    value: Lit::Unit,
+                                    span: (35, 36),
+                                }],
+                                ty: Type::Tuple { elems: vec![] },
+                                span: (36, 36),
+                            }),
+                            span: (18, 36),
+                            cons: ConstraintHandle::new(0),
+                        }],
+                        ty: Type::Unit,
+                        span: (32, 36),
+                    }),
+                    span: (2, 36),
+                    cons: ConstraintHandle::new(1),
+                }],
+                ty: Type::Unit,
+                span: (15, 36),
+            },
+        );
+    }
+}
+
+impl Display for Substitution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "T{} -> {}", self.from, self.to)
+    }
+}
+
+impl Display for Substitutions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.subs.is_empty() {
+            write!(f, "[]")
+        } else {
+            write!(f, "[")?;
+            for (i, sub) in self.subs.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}", sub)?;
+            }
+            write!(f, "]")
         }
     }
 }

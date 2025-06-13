@@ -133,7 +133,7 @@ mod cases {
             "{ fn foo() -> (int, int) { (1,2) } }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Unit { span: (8, 10) },
                         ret_ty: TypeExpr::Tuple {
@@ -180,7 +180,7 @@ mod cases {
             "{ fn foo (a: int) -> int { a + 1 } 2 }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Var {
                             name: "a".to_string(),
@@ -228,7 +228,7 @@ mod cases {
             "{ fn foo(a: int, b: int) -> int { a + b + 1 } }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Tuple {
                             elems: vec![
@@ -293,7 +293,7 @@ mod cases {
             { fn foo(a: int) -> int { 1 } foo 1 }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Var {
                             name: "a".to_string(),
@@ -344,7 +344,7 @@ mod cases {
             }",
             Expr::Block(Box::new(Block {
                 stmts: vec![
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Unit { span: (34, 36) },
                         ret_ty: TypeExpr::Int { span: (40, 43) },
@@ -364,7 +364,7 @@ mod cases {
                         })),
                         span: (28, 53),
                     })),
-                    Stmt::Func(Rc::new(Func {
+                    Stmt::Func(Box::new(Func {
                         name: "bar".to_string(),
                         param: Pattern::Unit { span: (73, 75) },
                         ret_ty: TypeExpr::Int { span: (79, 82) },

@@ -1,4 +1,8 @@
+pub mod display;
 pub mod typed;
+pub mod visitor;
+
+use crate::{ast::visitor::Visitor, parser::exprs::Prec};
 use sight_macros::LiteralValue;
 use std::{fmt::Debug, rc::Rc};
 
@@ -11,8 +15,8 @@ pub enum UnaryOp {
 impl UnaryOp {
     pub fn name(&self) -> String {
         match self {
-            UnaryOp::Pos => "UnaryOp::Pos(+)".to_string(),
-            UnaryOp::Neg => "UnaryOp::Neg(-)".to_string(),
+            UnaryOp::Pos => "u+".to_string(),
+            UnaryOp::Neg => "u-".to_string(),
         }
     }
 }
@@ -27,10 +31,17 @@ pub enum BinaryOp {
 impl BinaryOp {
     pub fn name(&self) -> String {
         match self {
-            BinaryOp::Add => "BinaryOp::Add(+)".to_string(),
-            BinaryOp::Sub => "BinaryOp::Sub(-)".to_string(),
-            BinaryOp::Mul => "BinaryOp::Mul(*)".to_string(),
-            BinaryOp::Div => "BinaryOp::Div(/)".to_string(),
+            BinaryOp::Add => "+".to_string(),
+            BinaryOp::Sub => "-".to_string(),
+            BinaryOp::Mul => "*".to_string(),
+            BinaryOp::Div => "/".to_string(),
+        }
+    }
+
+    pub fn prec(&self) -> Prec {
+        match self {
+            BinaryOp::Add | BinaryOp::Sub => Prec::OpAddSub,
+            BinaryOp::Mul | BinaryOp::Div => Prec::OpMulDiv,
         }
     }
 }
@@ -123,7 +134,7 @@ pub enum Stmt {
         rhs: Expr,
         span: (usize, usize),
     },
-    Func(Rc<Func>),
+    Func(Box<Func>),
     Block(Block),
     Expr {
         expr: Expr,
@@ -179,4 +190,8 @@ pub enum TypeExpr {
         elems: Vec<TypeExpr>,
         span: (usize, usize),
     },
+}
+
+pub trait AST {
+    fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E>;
 }

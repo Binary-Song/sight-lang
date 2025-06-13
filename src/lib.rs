@@ -5,3 +5,4 @@ pub use literal_value::LiteralValue;
 pub mod lexer;
 pub mod span;
 pub mod sema;
+pub mod frontend;

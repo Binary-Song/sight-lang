@@ -114,6 +114,46 @@ pub fn derive_literal_value(input: TokenStream) -> TokenStream {
     impl_block.into()
 }
 
+#[proc_macro_derive(NumConv)]
+pub fn derive_num_conv(input: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let name = &ast.ident;
+
+    let variants = if let syn::Data::Enum(data_enum) = &ast.data {
+        data_enum.variants.iter().collect::<Vec<_>>()
+    } else {
+        panic!("NumConv can only be derived for enums");
+    };
+
+    let try_from_arms = variants.iter().enumerate().map(|(i, v)| {
+        let ident = &v.ident;
+        quote! { #i => Ok(#name::#ident), }
+    });
+    let into_arms = variants.iter().enumerate().map(|(i, v)| {
+        let ident = &v.ident;
+        quote! { #name::#ident => #i   , }
+    });
+
+    let gen = quote! {
+        impl TryFrom<usize> for #name {
+            type Error = ();
+            fn try_from(value: usize) -> Result<Self, Self::Error> {
+                match value {
+                    #(#try_from_arms)*
+                    _ => Err(()),
+                }
+            }
+        }
+        impl From<#name> for usize {
+            fn from(val: #name) -> usize {
+                match val {
+                    #(#into_arms)*
+                }
+            }
+        }
+    };
+    gen.into()
+}
 // 这样你就可以在其他 crate 里这样用：
 // #[derive(MyDerive)]
 // struct MyStruct {}

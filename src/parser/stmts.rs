@@ -66,7 +66,7 @@ impl<'a> Parser<'a> {
             panic!("Logic error: expected function name to be an identifier");
         };
         let span = (_fn.span().0, body.span.1);
-        Ok(Stmt::Func(Rc::new(Func {
+        Ok(Stmt::Func(Box::new(Func {
             name: name,
             param: param_pattern,
             ret_ty: ret_type,

@@ -1,6 +1,6 @@
 use sight_macros::LiteralValue;
 
-use crate::ast::typed::Type;
+use crate::{ast::typed::Type, LiteralValue};
 use std::{
     cell::{RefCell, RefMut},
     rc::Rc,
@@ -13,9 +13,17 @@ pub enum Bindable {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstraintKind {
+    Let,
+    App,
+    Unify,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Constraint {
     pub lhs: Type,
     pub rhs: Type,
+    pub kind: ConstraintKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,10 +86,23 @@ pub struct ContextIter<'a> {
 /// An opaque handle to a Constraint.
 /// Currently only used to remind myself to add a Constraint
 /// when creating certain typed::Exprs, e.g. Let and App.
-/// 
+///
 /// Thus, the wrapped usize is intentionally private and unused.
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstraintHandle(usize);
+
+#[cfg(test)]
+impl ConstraintHandle {
+    pub fn new(handle: usize) -> Self {
+        ConstraintHandle(handle)
+    }
+}
+
+impl LiteralValue for ConstraintHandle {
+    fn literal_value(&self) -> String {
+        format!("ConstraintHandle::new({handle})", handle = self.0)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GetResult<T: std::fmt::Debug> {

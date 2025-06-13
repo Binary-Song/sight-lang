@@ -1,1 +1,1 @@
-mod to_typed;
+pub mod typing;

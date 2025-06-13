@@ -6,11 +6,12 @@ use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::span::Span;
 use function_name::named;
+use sight_macros::NumConv;
 use std::collections::VecDeque;
 use std::vec;
 use tracing::instrument;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
 pub enum Prec {
     Primitive,
     Primary,
@@ -109,6 +110,18 @@ impl<'a> Parser<'a> {
             Prec::Arrow => self.arrow_type_expr(),
             Prec::Tuple => self.tuple_type_expr(),
             Prec::Max => self.type_expr(),
+        }
+    }
+}
+
+impl display::WithPrec<Prec> for TypeExpr {
+    fn prec(&self) -> Option<Prec> {
+        match self {
+            TypeExpr::Unit { .. } => None,
+            TypeExpr::Int { .. } => None,
+            TypeExpr::Bool { .. } => None,
+            TypeExpr::Arrow { .. } => Some(Prec::Arrow),
+            TypeExpr::Tuple { .. } => Some(Prec::Tuple),
         }
     }
 }

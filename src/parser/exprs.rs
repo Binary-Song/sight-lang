@@ -6,8 +6,10 @@ use crate::parser::Parser;
 use crate::parser::PeekerResult;
 use crate::span::Span;
 use function_name::named;
+use sight_macros::NumConv;
 use tracing::{info, instrument};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
 pub enum Prec {
     Primitive,
     Primary,
@@ -200,6 +202,24 @@ impl<'a> Parser<'a> {
             Prec::OpAddSub => self.op_add_sub(),
             Prec::Tuple => self.tuple_expr(),
             Prec::Max => self.expr(),
+        }
+    }
+}
+
+impl display::WithPrec<crate::parser::exprs::Prec> for Expr {
+    /// Returns the precedence of the expression.
+    /// None means never put parentheses around it.
+    fn prec(&self) -> Option<Prec> {
+        match self {
+            Expr::Unit { .. } => None,
+            Expr::Int { .. } => None,
+            Expr::Bool { .. } => None,
+            Expr::Var { .. } => None,
+            Expr::UnaryOp { op, .. } => todo!(),
+            Expr::BinaryOp { op, .. } => Some(op.prec()),
+            Expr::App { .. } => Some(Prec::App),
+            Expr::Tuple { .. } => Some(Prec::Tuple),
+            Expr::Block(_) => None,
         }
     }
 }

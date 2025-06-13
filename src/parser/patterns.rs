@@ -6,9 +6,10 @@ use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::span::Span;
 use function_name::named;
+use sight_macros::NumConv;
 use tracing::instrument;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
 pub enum Prec {
     Variable,
     Primary,
@@ -120,6 +121,16 @@ impl<'a> Parser<'a> {
             Prec::Primary => self.primary_pattern(),
             Prec::Tuple => self.tuple_pattern(),
             Prec::Max => self.pattern(), // Max is the same as Tuple in this context
+        }
+    }
+}
+
+impl display::WithPrec<Prec> for Pattern {
+    fn prec(&self) -> Option<Prec> {
+        match self {
+            Pattern::Unit { .. } => None,
+            Pattern::Var { .. } => None,
+            Pattern::Tuple { .. } => Some(Prec::Tuple),
         }
     }
 }

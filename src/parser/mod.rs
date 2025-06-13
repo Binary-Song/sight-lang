@@ -11,9 +11,10 @@ pub mod context;
 pub mod exprs;
 pub mod patterns;
 pub mod stmts;
+pub mod type_exprs;
+
 #[cfg(test)]
 mod testing;
-mod type_exprs;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Trial {
