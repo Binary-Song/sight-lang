@@ -170,8 +170,7 @@ impl AST for crate::ast::typed::Type {
     fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E> {
         visitor.visit_ttype(self)?;
         match self {
-            crate::ast::typed::Type::Unit
-            | crate::ast::typed::Type::Bool
+             crate::ast::typed::Type::Bool
             | crate::ast::typed::Type::Int
             | crate::ast::typed::Type::TypeVar { index: _ } => Ok(()),
             crate::ast::typed::Type::Arrow { lhs, rhs } => {
@@ -193,7 +192,6 @@ impl AST for crate::ast::typed::Pattern {
     fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E> {
         visitor.visit_tpat(self)?;
         match self {
-            crate::ast::typed::Pattern::Unit { span: _ } => Ok(()),
             crate::ast::typed::Pattern::Var { name: _, ty, span: _ } => {
                 ty.accept(visitor)?;
                 Ok(())

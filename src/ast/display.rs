@@ -185,7 +185,6 @@ impl Display for typed::Func {
 impl Display for typed::Pattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            typed::Pattern::Unit { .. } => write!(f, "()"),
             typed::Pattern::Var { name, .. } => write!(f, "{name}"),
             typed::Pattern::Tuple { elems, .. } => {
                 write!(f, "(")?;
@@ -204,7 +203,6 @@ impl Display for typed::Pattern {
 impl Display for typed::Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            typed::Type::Unit => write!(f, "()"),
             typed::Type::Bool => write!(f, "bool"),
             typed::Type::Int => write!(f, "int"),
             typed::Type::Arrow { lhs, rhs } => write!(f, "{} -> {}", lhs, rhs),

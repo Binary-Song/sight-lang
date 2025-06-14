@@ -296,7 +296,7 @@ mod test {
     use super::*;
 
     fn dummy_type() -> Type {
-        Type::Unit
+        Type::unit()
     }
 
     #[test]

@@ -1,8 +1,4 @@
-
-use crate::{
-    ast::UnaryOp,
-    parser::context::ConstraintHandle,
-};
+use crate::{ast::UnaryOp, parser::context::ConstraintHandle};
 use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -24,9 +20,6 @@ pub struct Func {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Pattern {
-    Unit {
-        span: (usize, usize),
-    },
     Var {
         name: String,
         ty: Type,
@@ -37,6 +30,16 @@ pub enum Pattern {
         ty: Type,
         span: (usize, usize),
     },
+}
+
+impl Pattern {
+    pub fn unit(span: (usize, usize)) -> Self {
+        Self::Tuple {
+            elems: vec![],
+            ty: Type::unit(),
+            span: span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -82,12 +85,17 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Type {
-    Unit,
     Bool,
     Int,
     Arrow { lhs: Box<Type>, rhs: Box<Type> },
     Tuple { elems: Vec<Type> },
     TypeVar { index: u32 },
+}
+
+impl Type {
+    pub fn unit() -> Self {
+        Type::Tuple { elems: vec![] }
+    }
 }
 
 /////////////////////////////////////////
@@ -101,14 +109,11 @@ pub trait Typed {
 impl Typed for Pattern {
     fn ty(&self) -> Type {
         match self {
-            Pattern::Unit { .. } => Type::Unit,
             Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => ty.clone(),
         }
     }
-    fn mut_ty(&mut self) -> Option<&mut Type>
-    {
+    fn mut_ty(&mut self) -> Option<&mut Type> {
         match self {
-            Pattern::Unit { .. } => None,
             Pattern::Var { ty, .. } | Pattern::Tuple { ty, .. } => Some(ty),
         }
     }
@@ -147,7 +152,7 @@ impl Typed for Expr {
             | Expr::Application { ty, .. }
             | Expr::Seq { ty, .. }
             | Expr::Tuple { ty, .. } => ty.clone(),
-            Expr::Let { .. } | Expr::Func { .. } => Type::Unit,
+            Expr::Let { .. } | Expr::Func { .. } => Type::unit(),
         }
     }
     fn mut_ty(&mut self) -> Option<&mut Type> {
