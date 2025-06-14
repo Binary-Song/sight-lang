@@ -165,7 +165,6 @@ impl Display for Expr {
 impl Display for typed::Lit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            typed::Lit::Unit => write!(f, "()"),
             typed::Lit::Int(i) => write!(f, "{i}"),
             typed::Lit::Bool(b) => write!(f, "{b}"),
         }

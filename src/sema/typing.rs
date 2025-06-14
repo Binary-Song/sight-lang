@@ -14,8 +14,6 @@ use crate::parser::context::Context;
 use crate::span::Span;
 use std::collections::VecDeque;
 use std::fmt::Display;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::rc::Rc;
 use std::vec;
 
@@ -257,10 +255,7 @@ impl Expr {
 
     pub fn to_typed_with_unsolved_constraints(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
         match self {
-            Expr::Unit { span } => Ok(TExpr::Lit {
-                value: TLit::Unit,
-                span: *span,
-            }),
+            Expr::Unit { span } => Ok(TExpr::unit(span.clone())),
             Expr::Int { value, span } => Ok(TExpr::Lit {
                 value: TLit::Int(*value),
                 span: *span,
@@ -271,13 +266,6 @@ impl Expr {
             }),
             Expr::Var { name, span } => {
                 let ty = Self::find_var_by_name(name.as_str(), &ctx, *span)?.get_type();
-                if let Ok(mut file) = OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open("E:/sight-lang/1.txt")
-                {
-                    let _ = writeln!(file, "Found var {name} with type {ty:?}");
-                }
                 Ok(TExpr::Var {
                     name: name.clone(),
                     span: *span,

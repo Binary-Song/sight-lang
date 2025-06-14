@@ -3,7 +3,6 @@ use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Lit {
-    Unit,
     Int(i32),
     Bool(bool),
 }
@@ -83,6 +82,16 @@ pub enum Expr {
     },
 }
 
+impl Expr {
+    pub fn unit(span: (usize, usize)) -> Self {
+        Self::Tuple {
+            elems: vec![],
+            ty: Type::unit(),
+            span: span,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Type {
     Bool,
@@ -122,7 +131,6 @@ impl Typed for Pattern {
 impl Typed for Lit {
     fn ty(&self) -> Type {
         match self {
-            Lit::Unit => Type::Tuple { elems: vec![] },
             Lit::Int(_) => Type::Int,
             Lit::Bool(_) => Type::Bool,
         }
