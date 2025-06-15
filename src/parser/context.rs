@@ -1,9 +1,5 @@
-
 use crate::{ast::typed::Type, LiteralValue};
-use std::{
-    cell::{RefCell, },
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bindable {
@@ -26,27 +22,33 @@ pub struct Constraint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Binding(pub String, pub Bindable);
+pub struct Binding {
+    pub name: String,
+    pub bindable: Bindable,
+    pub span: Option<(usize, usize)>,
+}
+
+pub struct ContextSharedState {
+    pub next_type_var: u32,
+    pub constraints: VecDeque<Constraint>,
+}
 
 #[derive(Clone)]
 pub enum Context {
     Basic {
         bindings: Vec<Binding>,
         parent: Option<Rc<Context>>,
-        next_type_var: Rc<RefCell<u32>>,
-        constraints: Rc<RefCell<Vec<Constraint>>>,
+        state: Rc<RefCell<ContextSharedState>>,
     },
     FnFilter {
         filter: fn(&Binding) -> bool,
         parent: Rc<Context>,
-        next_type_var: Rc<RefCell<u32>>,
-        constraints: Rc<RefCell<Vec<Constraint>>>,
+        state: Rc<RefCell<ContextSharedState>>,
     },
     ClosureFilter {
         filter: Rc<dyn Fn(&Binding) -> bool>,
         parent: Rc<Context>,
-        next_type_var: Rc<RefCell<u32>>,
-        constraints: Rc<RefCell<Vec<Constraint>>>,
+        state: Rc<RefCell<ContextSharedState>>,
     },
 }
 
@@ -115,8 +117,10 @@ impl Context {
         Rc::new(Context::Basic {
             bindings: vec![],
             parent: None,
-            next_type_var: Rc::new(RefCell::new(0)),
-            constraints: Rc::new(RefCell::new(vec![])),
+            state: Rc::new(RefCell::new(ContextSharedState {
+                next_type_var: 0,
+                constraints: VecDeque::new(),
+            })),
         })
     }
 
@@ -131,8 +135,7 @@ impl Context {
     pub fn add_bindings(self: Rc<Self>, bindings: Vec<Binding>) -> Rc<Self> {
         Rc::new(Context::Basic {
             bindings,
-            next_type_var: self.next_type_var().clone(),
-            constraints: self.constraints().clone(),
+            state: self.state().clone(),
             parent: Some(self),
         })
     }
@@ -140,8 +143,7 @@ impl Context {
     pub fn add_fn_filter(self: Rc<Self>, filter: fn(&Binding) -> bool) -> Rc<Self> {
         Rc::new(Context::FnFilter {
             filter,
-            next_type_var: self.next_type_var().clone(),
-            constraints: self.constraints().clone(),
+            state: self.state(),
             parent: self,
         })
     }
@@ -149,8 +151,7 @@ impl Context {
     pub fn add_closure_filter(self: Rc<Self>, filter: Rc<dyn Fn(&Binding) -> bool>) -> Rc<Self> {
         Rc::new(Context::ClosureFilter {
             filter,
-            next_type_var: self.next_type_var().clone(),
-            constraints: self.constraints().clone(),
+            state: self.state(),
             parent: self,
         })
     }
@@ -219,7 +220,7 @@ impl Context {
         loop {
             match self.get(i) {
                 GetResult::Ok(binding) => {
-                    if binding.0 == name {
+                    if binding.name == name {
                         return Some(binding);
                     }
                 }
@@ -230,37 +231,29 @@ impl Context {
         }
     }
 
-    pub fn constraints(&self) -> Rc<RefCell<Vec<Constraint>>> {
-        match self {
-            Context::Basic { constraints, .. }
-            | Context::FnFilter { constraints, .. }
-            | Context::ClosureFilter { constraints, .. } => constraints.clone(),
-        }
-    }
-
     pub fn add_constraint(&self, constraint: Constraint) -> ConstraintHandle {
-        let cons = self.constraints();
-        let mut cons = cons.borrow_mut();
-        cons.push(constraint);
-        ConstraintHandle(cons.len() - 1)
+        self.state()
+            .borrow_mut()
+            .constraints
+            .push_back(constraint.clone());
+        let cons_len = self.state().borrow().constraints.len();
+        ConstraintHandle(cons_len - 1)
     }
 
-    pub fn next_type_var(&self) -> Rc<RefCell<u32>> {
+    pub fn state(&self) -> Rc<RefCell<ContextSharedState>> {
         match self {
-            Context::Basic { next_type_var, .. }
-            | Context::FnFilter { next_type_var, .. }
-            | Context::ClosureFilter { next_type_var, .. } => next_type_var.clone(),
+            Context::Basic { state, .. }
+            | Context::FnFilter { state, .. }
+            | Context::ClosureFilter { state, .. } => state.clone(),
         }
     }
 
     pub fn fresh_var(&self) -> u32 {
-        let next_var = self.next_type_var();
-        let mut val = next_var.borrow_mut();
-        let current = *val;
-        *val += 1;
-        current
+        self.state().borrow_mut().next_type_var += 1;
+        self.state().borrow().next_type_var - 1
     }
 }
+
 impl<'a> Iterator for ContextIter<'a> {
     type Item = &'a Binding;
     fn next(&mut self) -> Option<Self::Item> {
@@ -315,7 +308,11 @@ mod test {
     #[test]
     fn test_add_binding_and_len() {
         let ctx = Context::new();
-        let binding = Binding("x".to_string(), Bindable::Var(dummy_type()));
+        let binding = Binding {
+            name: "x".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        };
         let ctx2 = ctx.add_binding(binding.clone());
         assert_eq!(ctx2.len(), 1);
         match ctx2.get(0) {
@@ -327,8 +324,16 @@ mod test {
     #[test]
     fn test_add_bindings() {
         let ctx = Context::new();
-        let b1 = Binding("a".to_string(), Bindable::Var(dummy_type()));
-        let b2 = Binding("b".to_string(), Bindable::Var(dummy_type()));
+        let b1 = Binding {
+            name: "a".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        };
+        let b2 = Binding {
+            name: "b".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        };
         let ctx2 = ctx.add_bindings(vec![b1.clone(), b2.clone()]);
         assert_eq!(ctx2.len(), 2);
         assert_eq!(ctx2.get(0), GetResult::Ok(&b2));
@@ -336,13 +341,17 @@ mod test {
     }
 
     fn filter_only_x(binding: &Binding) -> bool {
-        binding.0 == "x"
+        binding.name == "x"
     }
 
     #[test]
     fn test_add_fn_filter() {
         let binding = Context::new();
-        let ctx = binding.add_binding(Binding("x".to_string(), Bindable::Var(dummy_type())));
+        let ctx = binding.add_binding(Binding {
+            name: "x".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        });
         let filtered_ctx = ctx.add_fn_filter(filter_only_x);
         assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
     }
@@ -350,8 +359,12 @@ mod test {
     #[test]
     fn test_add_closure_filter() {
         let binding = Context::new();
-        let ctx = binding.add_binding(Binding("y".to_string(), Bindable::Var(dummy_type())));
-        let filter = Rc::new(|b: &Binding| b.0 == "y");
+        let ctx = binding.add_binding(Binding {
+            name: "y".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        });
+        let filter = Rc::new(|b: &Binding| b.name == "y");
         let filtered_ctx = ctx.add_closure_filter(filter);
         assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
     }
@@ -360,10 +373,18 @@ mod test {
     fn test_iter() {
         let binding = Context::new();
         let ctx = binding.add_bindings(vec![
-            Binding("a".to_string(), Bindable::Var(dummy_type())),
-            Binding("b".to_string(), Bindable::Var(dummy_type())),
+            Binding {
+                name: "a".to_string(),
+                bindable: Bindable::Var(dummy_type()),
+                span: None,
+            },
+            Binding {
+                name: "b".to_string(),
+                bindable: Bindable::Var(dummy_type()),
+                span: None,
+            },
         ]);
-        let names: Vec<_> = ctx.iter().map(|b| b.0.clone()).collect();
+        let names: Vec<_> = ctx.iter().map(|b| b.name.clone()).collect();
         assert_eq!(names, vec!["b".to_string(), "a".to_string()]);
     }
 
@@ -377,12 +398,20 @@ mod test {
     fn test_find_self_by_name() {
         let binding = Context::new();
         let ctx = binding.add_bindings(vec![
-            Binding("foo".to_string(), Bindable::Var(dummy_type())),
-            Binding("bar".to_string(), Bindable::Var(dummy_type())),
+            Binding {
+                name: "foo".to_string(),
+                bindable: Bindable::Var(dummy_type()),
+                span: None,
+            },
+            Binding {
+                name: "bar".to_string(),
+                bindable: Bindable::Var(dummy_type()),
+                span: None,
+            },
         ]);
         let found = ctx.find_self_by_name("foo");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().0, "foo");
+        assert_eq!(found.unwrap().name, "foo");
         assert!(ctx.find_self_by_name("baz").is_none());
     }
 
@@ -409,10 +438,14 @@ mod test {
     #[test]
     fn test_into_iter() {
         let binding = Context::new();
-        let ctx = binding.add_binding(Binding("z".to_string(), Bindable::Var(dummy_type())));
+        let ctx = binding.add_binding(Binding {
+            name: "z".to_string(),
+            bindable: Bindable::Var(dummy_type()),
+            span: None,
+        });
         let mut iter = (&ctx).into_iter();
         let b = iter.next().unwrap();
-        assert_eq!(b.0, "z");
+        assert_eq!(b.name, "z");
         assert!(iter.next().is_none());
     }
 }
