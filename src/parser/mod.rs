@@ -6,9 +6,11 @@ use std::fmt::Debug;
 use std::vec;
 pub mod context;
 pub mod exprs;
+mod name_stack;
 pub mod patterns;
 pub mod stmts;
 pub mod type_exprs;
+pub use name_stack::NameStack;
 
 #[cfg(test)]
 mod testing;
@@ -31,42 +33,64 @@ pub enum ParseErr {
     UnexpectedTokens { got: Vec<Token> },
 }
 
-struct PropertyStack<T> {
-    stack: Vec<T>,
+#[derive(Default)]
+pub struct PropertyStack<T> {
+    rest: Vec<T>,
     bottom: T,
+}
+#[macro_export]
+macro_rules! guarded_push {
+    ($stack:expr, $value:expr, $body:block) => {{
+        $stack.push($value);
+        let result = (|| $body)();
+        $stack.pop();
+        result
+    }};
 }
 
 impl<T: Clone> PropertyStack<T> {
     pub fn new(init: T) -> Self {
         PropertyStack {
-            stack: vec![],
+            rest: vec![],
             bottom: init,
         }
     }
 
     pub fn push(&mut self, value: T) {
-        self.stack.push(value);
+        self.rest.push(value);
     }
 
     pub fn pop(&mut self) {
-        if self.stack.is_empty() {
+        if self.rest.is_empty() {
             panic!("Logic error: PropertyStack cannot be popped when empty. Push/pop imbalance is a serious bug!");
         }
-        self.stack.pop();
+        self.rest.pop();
     }
 
     pub fn value(&self) -> T {
-        self.stack
+        self.rest
             .last()
             .map(|x| x.clone())
             .unwrap_or(self.bottom.clone())
     }
- 
+
+    pub fn set(&mut self, value: T) {
+        if self.rest.is_empty() {
+            self.bottom = value
+        } else {
+            self.rest.pop();
+            self.rest.push(value);
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        std::iter::once(&self.bottom).chain(self.rest.iter())
+    }
 }
 
 impl<T> Drop for PropertyStack<T> {
     fn drop(&mut self) {
-        if !self.stack.is_empty() {
+        if !self.rest.is_empty() {
             panic!(
                 "Logic error: PropertyStack should be empty on drop. Push/pop imbalance is a serious bug!"
             );
@@ -78,6 +102,7 @@ pub struct Parser<'a> {
     pub lexer: Lexer<'a>,
     trials: Vec<Trial>,
     optional_type_anno_in_patterns: PropertyStack<bool>,
+    block_count: PropertyStack<usize>,
 }
 
 pub enum PeekerResult {
@@ -102,6 +127,7 @@ impl<'a> Parser<'a> {
             //allow_block_stack: vec![true],
             trials: vec![],
             optional_type_anno_in_patterns: PropertyStack::new(false),
+            block_count: PropertyStack::new(0),
         }
     }
 

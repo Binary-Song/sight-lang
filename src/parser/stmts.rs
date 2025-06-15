@@ -1,3 +1,4 @@
+use crate::ast::typed::ScopeName;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::*;
@@ -5,6 +6,7 @@ use crate::span::Span;
 use function_name::named;
 use std::vec;
 use tracing::instrument;
+use crate::guarded_push;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParseStmtResult {
@@ -55,12 +57,12 @@ impl<'a> Parser<'a> {
         let param_pattern = self.pattern_with_max_prec(patterns::Prec::Primary)?;
         let _arrow = self.expect(TokenType::Arrow, rule)?;
         let ret_type = self.type_expr()?;
-        let body = self.block()?;
         let name = if let Token::Ident(name, _) = name {
             name
         } else {
             panic!("Logic error: expected function name to be an identifier");
         };
+        let body = self.block(Some(name.clone()))?;
         let span = (_fn.span().0, body.span.1);
         Ok(Stmt::Func(Box::new(Func {
             name: name,
@@ -91,7 +93,7 @@ impl<'a> Parser<'a> {
         let parse_stmt_result = self.ll1_try_parse(&[
             &|parser: &mut Parser<'a>| parser.let_stmt(),
             &|parser: &mut Parser<'a>| parser.fn_stmt(),
-            &|parser: &mut Parser<'a>| parser.block().map(|block| Stmt::Block(block)),
+            &|parser: &mut Parser<'a>| parser.block(None).map(|block| Stmt::Block(block)),
             &|parser: &mut Parser<'a>| parser.empty_stmt(),
         ]);
         let new_pos = self.lexer.pos;
@@ -146,49 +148,59 @@ impl<'a> Parser<'a> {
     //                                                            | "}" -> the block has trailing expr -> return
     #[named]
     #[instrument(ret)]
-    pub fn block(&mut self) -> Result<Block, ParseErr> {
-        // if !self.allow_blocks() {
-        //     return Err(ParseErr::UnexpectedToken {
-        //         got: self.lexer.peek_token(),
-        //     });
-        // }
+    pub fn block(&mut self, name: Option<String>) -> Result<Block, ParseErr> {
         let rule = function_name!();
         let mut stmts = vec![];
-        let lbrace = self.expect(TokenType::LBrace, rule)?;
-        let trailing_expr = loop {
-            let stmt_result = self.stmt();
-            match stmt_result {
-                ParseStmtResult::Ok(stmt) => {
-                    stmts.push(stmt);
+        let span = guarded_push!(self.block_count, 0, {
+            let lbrace = self.expect(TokenType::LBrace, rule)?;
+            let trailing_expr = loop {
+                let stmt_result = self.stmt();
+                match stmt_result {
+                    ParseStmtResult::Ok(stmt) => {
+                        stmts.push(stmt);
+                    }
+                    ParseStmtResult::BlockEnded => {
+                        break None;
+                    }
+                    ParseStmtResult::BlockEndedWithExpr(expr) => {
+                        break Some(expr);
+                    }
+                    ParseStmtResult::Err(err) => {
+                        return Err(err);
+                    }
                 }
-                ParseStmtResult::BlockEnded => {
-                    break None;
-                }
-                ParseStmtResult::BlockEndedWithExpr(expr) => {
-                    break Some(expr);
-                }
-                ParseStmtResult::Err(err) => {
-                    return Err(err);
-                }
-            }
-        };
-        let rbrace = self.expect(TokenType::RBrace, rule)?;
-        if let Some(e) = trailing_expr {
-            let span = (lbrace.span().0, rbrace.span().1);
-            stmts.push(Stmt::Expr {
-                expr: e,
-                span: span,
-            });
-        } else {
-            // add a fake unit expr to the block if it has no trailing expr
-            stmts.push(Stmt::Expr {
-                expr: Expr::Unit {
+            };
+            let rbrace = self.expect(TokenType::RBrace, rule)?;
+            if let Some(e) = trailing_expr {
+                let span = (lbrace.span().0, rbrace.span().1);
+                stmts.push(Stmt::Expr {
+                    expr: e,
+                    span: span,
+                });
+                Ok((lbrace.span().0, rbrace.span().1))
+            } else {
+                // add a fake unit expr to the block if it has no trailing expr
+                stmts.push(Stmt::Expr {
+                    expr: Expr::Unit {
+                        span: rbrace.span(),
+                    },
                     span: rbrace.span(),
-                },
-                span: rbrace.span(),
-            });
-        }
-        let span = (lbrace.span().0, rbrace.span().1);
-        return Ok(Block { stmts, span });
+                });
+                Ok((lbrace.span().0, rbrace.span().1))
+            }
+        })?;
+        return Ok(Block {
+            stmts,
+            span,
+            name: match name {
+                Some(name) => ScopeName::Name(name),
+                None => {
+                    // !!! Important: if parsing failed, we do not bump the block count.
+                    let block_index = self.block_count.value();
+                    self.block_count.set(block_index + 1);
+                    ScopeName::Index(block_index)
+                }
+            },
+        });
     }
 }

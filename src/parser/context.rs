@@ -1,10 +1,14 @@
-use crate::{ast::typed::Type, LiteralValue};
+use crate::{
+    ast::typed::{ScopeName, Type},
+    parser::{NameStack, PropertyStack},
+    LiteralValue,
+};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bindable {
-    Var(Type),
-    Func(Type),
+    Var { ty: Type, local_var_index: usize },
+    Func { ty: Type, global_name: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,9 +32,12 @@ pub struct Binding {
     pub span: Option<(usize, usize)>,
 }
 
+#[derive(Default)]
 pub struct ContextSharedState {
     pub next_type_var: u32,
     pub constraints: VecDeque<Constraint>,
+    pub local_var_count: PropertyStack<usize>,
+    pub name_stack: NameStack,
 }
 
 #[derive(Clone)]
@@ -117,10 +124,7 @@ impl Context {
         Rc::new(Context::Basic {
             bindings: vec![],
             parent: None,
-            state: Rc::new(RefCell::new(ContextSharedState {
-                next_type_var: 0,
-                constraints: VecDeque::new(),
-            })),
+            state: Rc::new(RefCell::new(ContextSharedState::default())),
         })
     }
 
@@ -248,10 +252,39 @@ impl Context {
         }
     }
 
-    pub fn fresh_var(&self) -> u32 {
+    pub fn state_ref(&self) -> std::cell::Ref<ContextSharedState> {
+        match self {
+            Context::Basic { state, .. }
+            | Context::FnFilter { state, .. }
+            | Context::ClosureFilter { state, .. } => state.borrow(),
+        }
+    }
+
+    pub fn state_refmut(&self) -> std::cell::RefMut<ContextSharedState> {
+        match self {
+            Context::Basic { state, .. }
+            | Context::FnFilter { state, .. }
+            | Context::ClosureFilter { state, .. } => state.borrow_mut(),
+        }
+    }
+
+    pub fn alloc_type_var(&self) -> u32 {
         self.state().borrow_mut().next_type_var += 1;
         self.state().borrow().next_type_var - 1
     }
+
+    pub fn alloc_local_var(&self) -> usize {
+        let mut state = self.state_refmut();
+        let index = state.local_var_count.value();
+        state.local_var_count.set(index + 1);
+        index
+    }
+
+    pub fn qualify_name(&self, name: &str) -> String {
+        self.state_ref().name_stack.qualify_name(name)
+    }
+
+    // pub fn push_function_scope
 }
 
 impl<'a> Iterator for ContextIter<'a> {
@@ -278,8 +311,8 @@ impl<'a> IntoIterator for &'a Context {
 impl Bindable {
     pub fn get_type(&self) -> Type {
         match self {
-            Bindable::Var(ty) => ty.clone(),
-            Bindable::Func(ty) => ty.clone(),
+            Bindable::Var { ty, .. } => ty.clone(),
+            Bindable::Func { ty, .. } => ty.clone(),
         }
     }
 }
@@ -310,7 +343,10 @@ mod test {
         let ctx = Context::new();
         let binding = Binding {
             name: "x".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         };
         let ctx2 = ctx.add_binding(binding.clone());
@@ -326,12 +362,18 @@ mod test {
         let ctx = Context::new();
         let b1 = Binding {
             name: "a".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         };
         let b2 = Binding {
             name: "b".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         };
         let ctx2 = ctx.add_bindings(vec![b1.clone(), b2.clone()]);
@@ -349,7 +391,10 @@ mod test {
         let binding = Context::new();
         let ctx = binding.add_binding(Binding {
             name: "x".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         });
         let filtered_ctx = ctx.add_fn_filter(filter_only_x);
@@ -361,7 +406,10 @@ mod test {
         let binding = Context::new();
         let ctx = binding.add_binding(Binding {
             name: "y".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         });
         let filter = Rc::new(|b: &Binding| b.name == "y");
@@ -375,12 +423,18 @@ mod test {
         let ctx = binding.add_bindings(vec![
             Binding {
                 name: "a".to_string(),
-                bindable: Bindable::Var(dummy_type()),
+                bindable: Bindable::Var {
+                    ty: (dummy_type()),
+                    local_var_index: 0,
+                },
                 span: None,
             },
             Binding {
                 name: "b".to_string(),
-                bindable: Bindable::Var(dummy_type()),
+                bindable: Bindable::Var {
+                    ty: (dummy_type()),
+                    local_var_index: 0,
+                },
                 span: None,
             },
         ]);
@@ -400,12 +454,18 @@ mod test {
         let ctx = binding.add_bindings(vec![
             Binding {
                 name: "foo".to_string(),
-                bindable: Bindable::Var(dummy_type()),
+                bindable: Bindable::Var {
+                    ty: (dummy_type()),
+                    local_var_index: 0,
+                },
                 span: None,
             },
             Binding {
                 name: "bar".to_string(),
-                bindable: Bindable::Var(dummy_type()),
+                bindable: Bindable::Var {
+                    ty: dummy_type(),
+                    local_var_index: 0,
+                },
                 span: None,
             },
         ]);
@@ -418,9 +478,15 @@ mod test {
     #[test]
     fn test_bindable_get_type() {
         let ty = dummy_type();
-        let b = Bindable::Var(ty.clone());
+        let b = Bindable::Var {
+            ty: (ty.clone()),
+            local_var_index: 0,
+        };
         assert_eq!(b.get_type(), ty);
-        let b = Bindable::Func(ty.clone());
+        let b = Bindable::Func {
+            ty: ty.clone(),
+            global_name: "".to_string(),
+        };
         assert_eq!(b.get_type(), ty);
     }
 
@@ -440,7 +506,10 @@ mod test {
         let binding = Context::new();
         let ctx = binding.add_binding(Binding {
             name: "z".to_string(),
-            bindable: Bindable::Var(dummy_type()),
+            bindable: Bindable::Var {
+                ty: (dummy_type()),
+                local_var_index: 0,
+            },
             span: None,
         });
         let mut iter = (&ctx).into_iter();

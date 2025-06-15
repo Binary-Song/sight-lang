@@ -6,3 +6,4 @@ pub mod lexer;
 pub mod span;
 pub mod sema;
 pub mod frontend;
+pub mod backend;

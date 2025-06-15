@@ -108,12 +108,13 @@ fn assert_parse_expr(input: &str, expr: Expr) {
     let actual_str = actual.literal_value();
     println!("\nGot:\n{actual_str}\n");
     assert_eq!(actual, expr);
-} 
+}
 
 mod cases {
     use super::assert_parse_expr;
-    use crate::ast::*;
+    use crate::ast::typed::ScopeName;
     use crate::ast::Expr;
+    use crate::ast::*;
 
     #[test]
     fn test_var() {
@@ -131,6 +132,7 @@ mod cases {
         assert_parse_expr(
             "{ fn foo() -> (int, int) { (1,2) } }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
@@ -143,6 +145,7 @@ mod cases {
                             span: (15, 23),
                         },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("foo".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::Tuple {
                                     elems: vec![
@@ -178,6 +181,7 @@ mod cases {
         assert_parse_expr(
             "{ fn foo (a: int) -> int { a + 1 } 2 }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
@@ -188,6 +192,7 @@ mod cases {
                         },
                         ret_ty: TypeExpr::Int { span: (21, 24) },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("foo".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::BinaryOp {
                                     op: BinaryOp::Add,
@@ -226,6 +231,7 @@ mod cases {
         assert_parse_expr(
             "{ fn foo(a: int, b: int) -> int { a + b + 1 } }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
@@ -246,6 +252,7 @@ mod cases {
                         },
                         ret_ty: TypeExpr::Int { span: (28, 31) },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("foo".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::BinaryOp {
                                     op: BinaryOp::Add,
@@ -291,6 +298,7 @@ mod cases {
             "
             { fn foo(a: int) -> int { 1 } foo 1 }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
@@ -301,6 +309,7 @@ mod cases {
                         },
                         ret_ty: TypeExpr::Int { span: (33, 36) },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("foo".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::Int {
                                     value: 1,
@@ -342,12 +351,14 @@ mod cases {
              foo() + bar()
             }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Func(Box::new(Func {
                         name: "foo".to_string(),
                         param: Pattern::Unit { span: (34, 36) },
                         ret_ty: TypeExpr::Int { span: (40, 43) },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("foo".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::App {
                                     func: Box::new(Expr::Var {
@@ -368,6 +379,7 @@ mod cases {
                         param: Pattern::Unit { span: (73, 75) },
                         ret_ty: TypeExpr::Int { span: (79, 82) },
                         body: Expr::Block(Box::new(Block {
+                            name: typed::ScopeName::Name("bar".to_string()),
                             stmts: vec![Stmt::Expr {
                                 expr: Expr::App {
                                     func: Box::new(Expr::Var {
@@ -418,6 +430,7 @@ mod cases {
         assert_parse_expr(
             "{ let a : int = 1; let b : int = a + 1; b }",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Let {
                         lhs: Pattern::Var {
@@ -469,6 +482,7 @@ mod cases {
         assert_parse_expr(
             "{let (a: int, b: int) = (1,2);}",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Let {
                         lhs: Pattern::Tuple {
@@ -516,6 +530,7 @@ mod cases {
         assert_parse_expr(
             "{let (a: int, ()) = 1, ();}",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Let {
                         lhs: Pattern::Tuple {
@@ -583,6 +598,7 @@ mod cases {
                         span: (20, 21),
                     },
                 ],
+                name: ScopeName::Index(0),
                 span: (0, 21),
             })),
         );
@@ -593,6 +609,7 @@ mod cases {
         assert_parse_expr(
             "{let (x, y) = (1, 2);}",
             Expr::Block(Box::new(Block {
+                name: typed::ScopeName::Index(0),
                 stmts: vec![
                     Stmt::Let {
                         lhs: Pattern::Tuple {
@@ -631,6 +648,63 @@ mod cases {
                     },
                 ],
                 span: (0, 22),
+            })),
+        );
+    }
+
+    #[test]
+    fn test_nested_blocks() {
+        assert_parse_expr(
+            "{ { } { {} } fn a () -> () {} }",
+            Expr::Block(Box::new(Block {
+                stmts: vec![
+                    Stmt::Block(Block {
+                        stmts: vec![Stmt::Expr {
+                            expr: Expr::Unit { span: (4, 5) },
+                            span: (4, 5),
+                        }],
+                        name: ScopeName::Index(0),
+                        span: (2, 5),
+                    }),
+                    Stmt::Block(Block {
+                        stmts: vec![
+                            Stmt::Block(Block {
+                                stmts: vec![Stmt::Expr {
+                                    expr: Expr::Unit { span: (9, 10) },
+                                    span: (9, 10),
+                                }],
+                                name: ScopeName::Index(0),
+                                span: (8, 10),
+                            }),
+                            Stmt::Expr {
+                                expr: Expr::Unit { span: (11, 12) },
+                                span: (11, 12),
+                            },
+                        ],
+                        name: ScopeName::Index(1),
+                        span: (6, 12),
+                    }),
+                    Stmt::Func(Box::new(Func {
+                        name: "a".to_string(),
+                        param: Pattern::Unit { span: (18, 20) },
+                        ret_ty: TypeExpr::Unit { span: (24, 26) },
+                        body: Expr::Block(Box::new(Block {
+                            stmts: vec![Stmt::Expr {
+                                expr: Expr::Unit { span: (28, 29) },
+                                span: (28, 29),
+                            }],
+                            name: ScopeName::Name("a".to_string()),
+                            span: (27, 29),
+                        })),
+                        span: (13, 29),
+                    })),
+                    Stmt::Expr {
+                        expr: Expr::Unit { span: (30, 31) },
+                        span: (30, 31),
+                    },
+                ],
+                name: ScopeName::Index(0),
+                span: (0, 31),
             })),
         );
     }

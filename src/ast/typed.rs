@@ -41,6 +41,12 @@ impl Pattern {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue, )]
+pub enum ScopeName {
+    Name(String),
+    Index(usize),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Expr {
     Lit {
@@ -111,7 +117,10 @@ impl Type {
 /// Trait and impl
 
 pub trait Typed {
+    /// Returns the type of the node.
     fn ty(&self) -> Type;
+    /// Returns a Type if the node actually stores its own type (as opposed to deducing its type when queried).
+    /// Otherwise, returns None.
     fn mut_ty(&mut self) -> Option<&mut Type>;
 }
 

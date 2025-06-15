@@ -246,6 +246,16 @@ impl Display for typed::Expr {
                 write!(f, ")")
             }
             TExpr::Func { func } => write!(f, "{}", func),
+          
+        }
+    }
+}
+
+impl Display for typed::ScopeName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            typed::ScopeName::Name(x) => write!(f, "{x}"),
+            typed::ScopeName::Index(x) => write!(f, "{x}"),
         }
     }
 }

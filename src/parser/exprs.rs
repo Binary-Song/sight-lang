@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
             // parenthesized expr parser
             &|parser| parser.paren(rule, &|parser| parser.expr()),
             // block
-            &|parser| parser.block().map(|block| Expr::Block(Box::new(block))),
+            &|parser| parser.block(None).map(|block| Expr::Block(Box::new(block))),
         ];
         self.ll1_try_parse(parsers)
     }

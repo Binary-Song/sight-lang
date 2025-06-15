@@ -6,6 +6,7 @@ use crate::ast::typed::Type;
 use crate::ast::typed::Typed;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
+use crate::guarded_push;
 use crate::parser::context::Bindable;
 use crate::parser::context::Binding;
 use crate::parser::context::Constraint;
@@ -20,68 +21,96 @@ use std::vec;
 impl<'a> Context {
     pub fn new_with_builtins() -> Rc<Self> {
         let ctx = Self::new();
-        let ctx = ctx.add_binding(Binding(
-            BinaryOp::Add.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Tuple {
-                    elems: vec![Type::Int, Type::Int],
+        let ctx = ctx.add_binding(Binding {
+            name: BinaryOp::Add.name().to_string(),
+            bindable: Bindable::Func {
+                ty: Type::Arrow {
+                    lhs: Box::new(Type::Tuple {
+                        elems: vec![Type::Int, Type::Int],
+                    }),
+                    rhs: Box::new(Type::Int),
+                },
+                global_name: BinaryOp::Add.name().to_string(),
+            },
+            span: None,
+        });
+        let ctx = ctx.add_binding(Binding {
+            name: BinaryOp::Sub.name().to_string(),
+            bindable: Bindable::Func {
+                ty: (Type::Arrow {
+                    lhs: Box::new(Type::Tuple {
+                        elems: vec![Type::Int, Type::Int],
+                    }),
+                    rhs: Box::new(Type::Int),
                 }),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
-        let ctx = ctx.add_binding(Binding(
-            BinaryOp::Sub.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Tuple {
-                    elems: vec![Type::Int, Type::Int],
+                global_name: BinaryOp::Sub.name().to_string(),
+            },
+            span: None,
+        });
+        let ctx = ctx.add_binding(Binding {
+            name: BinaryOp::Mul.name().to_string(),
+            bindable: Bindable::Func {
+                ty: (Type::Arrow {
+                    lhs: Box::new(Type::Tuple {
+                        elems: vec![Type::Int, Type::Int],
+                    }),
+                    rhs: Box::new(Type::Int),
                 }),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
-        let ctx = ctx.add_binding(Binding(
-            BinaryOp::Mul.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Tuple {
-                    elems: vec![Type::Int, Type::Int],
+                global_name: BinaryOp::Mul.name().to_string(),
+            },
+            span: None,
+        });
+        let ctx = ctx.add_binding(Binding {
+            name: BinaryOp::Div.name().to_string(),
+            bindable: Bindable::Func {
+                ty: (Type::Arrow {
+                    lhs: Box::new(Type::Tuple {
+                        elems: vec![Type::Int, Type::Int],
+                    }),
+                    rhs: Box::new(Type::Int),
                 }),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
-        let ctx = ctx.add_binding(Binding(
-            BinaryOp::Div.name().to_string(),
-            Bindable::Func(Type::Arrow {
-                lhs: Box::new(Type::Tuple {
-                    elems: vec![Type::Int, Type::Int],
-                }),
-                rhs: Box::new(Type::Int),
-            }),
-        ));
+                global_name: BinaryOp::Div.name().to_string(),
+            },
+            span: None,
+        });
         ctx
     }
 
-    fn add_bindings_in_patttern(self: Rc<Self>, pat: &TPattern) -> Rc<Context> {
-        fn collect_bindings_in_pattern(pat: &TPattern, bindings: &mut Vec<Binding>) {
+    fn add_bindings_in_patttern(self: Rc<Context>, pat: &TPattern) -> Rc<Context> {
+        fn collect_bindings_in_pattern(
+            ctx: Rc<Context>,
+            pat: &TPattern,
+            bindings: &mut Vec<Binding>,
+        ) {
             match pat {
-                TPattern::Var { name, ty, .. } => {
-                    bindings.push(Binding(name.clone(), Bindable::Var(ty.clone())));
+                TPattern::Var { name, ty, span } => {
+                    bindings.push(Binding {
+                        name: name.clone(),
+                        bindable: Bindable::Var {
+                            ty: (ty.clone()),
+                            local_var_index: ctx.alloc_local_var(),
+                        },
+                        span: Some(*span),
+                    });
                 }
                 TPattern::Tuple { elems, .. } => {
                     for elem in elems {
-                        collect_bindings_in_pattern(elem, bindings);
+                        collect_bindings_in_pattern(ctx.clone(), elem, bindings);
                     }
                 }
             }
         }
         let mut bindings = Vec::new();
-        collect_bindings_in_pattern(pat, &mut bindings);
+        collect_bindings_in_pattern(self.clone(), pat, &mut bindings);
         self.add_bindings(bindings)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypingErr {
     UnboundVar { span: (usize, usize) },
-    ErrorMsg(String),
+    DuplicateBinding { binding: Binding },
+    CannotUnify { lhs: Type, rhs: Type },
 }
 
 pub type TypingResult<T> = Result<T, TypingErr>;
@@ -123,7 +152,7 @@ impl Pattern {
                     type_anno.to_type(ctx)?
                 } else {
                     Type::TypeVar {
-                        index: ctx.fresh_var(),
+                        index: ctx.alloc_type_var(),
                     }
                 },
                 span: *span,
@@ -148,31 +177,62 @@ impl Pattern {
 impl Block {
     fn stmts_to_typed(
         ctx: Rc<Context>,
-        mut stmts: &[Stmt],
+        stmts: VecDeque<Stmt>,
         mut span: (usize, usize),
     ) -> TypingResult<TExpr> {
+        fn collect_func_bindings(
+            ctx: Rc<Context>,
+            stmts: VecDeque<Stmt>,
+        ) -> TypingResult<(VecDeque<Stmt>, Vec<Binding>)> {
+            let mut out_fn_stmts = VecDeque::new();
+            let mut out_other_stmts = VecDeque::new();
+            let mut bindings = vec![];
+            for stmt in stmts {
+                match stmt {
+                    // if func, then we add the typing info to the bindings
+                    // and insert the func to the front of the output_stmts
+                    // so it will not be tucked into a let body
+                    Stmt::Func(ref func) => {
+                        bindings.push(Binding {
+                            bindable: Bindable::Func {
+                                ty: (Type::Arrow {
+                                    lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
+                                    rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
+                                }),
+                                global_name: ctx.qualify_name(&func.name),
+                            },
+                            name: func.name.clone(),
+                            span: Some(func.span),
+                        });
+                        out_fn_stmts.push_back(stmt);
+                    }
+                    s => {
+                        out_other_stmts.push_back(s);
+                    }
+                }
+            }
+            out_fn_stmts.extend(out_other_stmts);
+            Ok((out_fn_stmts, bindings))
+        }
         // first pass: add all function bindings to the context
         // so the user can do mutual recursions in these functions
-        let mut bindings = vec![];
-        for stmt in stmts {
-            match stmt {
-                Stmt::Func(func) => bindings.push(Binding(
-                    func.name.clone(),
-                    Bindable::Func(Type::Arrow {
-                        lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
-                        rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
-                    }),
-                )),
-                _ => (),
+        let (mut stmts, bindings) = collect_func_bindings(ctx.clone(), stmts)?;
+        // check if names are unique
+        let mut names = std::collections::HashSet::new();
+        for binding in &bindings {
+            if !names.insert(binding.name.clone()) {
+                return Err(TypingErr::DuplicateBinding {
+                    binding: binding.clone(),
+                });
             }
         }
         let ctx = ctx.add_bindings(bindings);
         // second pass: convert all statements to typed expressions
         // if we see a let stmt, we will tuck the rest of the sequence into the body of the let
         let mut res_seq: Vec<TExpr> = Vec::new();
+        let mut block_count = 0;
         while !stmts.is_empty() {
-            let first_stmt = &stmts[0];
-            stmts = &stmts[1..];
+            let first_stmt = stmts.remove(0).unwrap();
             span = (first_stmt.span().1, span.1);
             match first_stmt {
                 Stmt::Let {
@@ -208,23 +268,35 @@ impl Block {
                     res_seq.push(expr.to_typed_with_unsolved_constraints(ctx.clone())?)
                 }
                 Stmt::Func(func) => {
-                    let tfunc = TExpr::Func {
+                    res_seq.push(TExpr::Func {
                         func: Box::new(TFunc {
                             name: func.name.clone(),
                             param: func.param.to_typed(ctx.clone())?,
                             ret_ty: func.ret_ty.to_type(ctx.clone())?,
-                            body: func.body.to_typed_with_unsolved_constraints(ctx.clone())?,
+                            body: {
+                                guarded_push!(
+                                    ctx.state_refmut().local_var_count,
+                                    0,
+                                    {
+                                        func.body.to_typed_with_unsolved_constraints(ctx.clone())
+                                    }
+                                )?
+                            },
                             span: func.span,
                             func_ty: Type::Arrow {
                                 lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
                                 rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
                             },
                         }),
-                    };
-                    res_seq.push(tfunc);
+                    });
                 }
                 Stmt::Block(block) => {
-                    res_seq.push(block.to_typed(ctx.clone())?);
+                    guarded_push!(ctx.state_refmut().name_stack, block.name.clone(),
+                    {
+                        let x = block.to_typed(ctx.clone())?;
+                        Ok(res_seq.push(x))
+                    }
+                    )?
                 }
                 Stmt::Empty { .. } => {}
             }
@@ -236,8 +308,10 @@ impl Block {
         });
     }
 
+    /// Converts the Block to a typed expression.
     pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
-        Self::stmts_to_typed(ctx.clone(), &self.stmts, self.span)
+        // a block introduces a new nameless scope.
+        Self::stmts_to_typed(ctx.clone(), self.stmts.clone().into(), self.span)
     }
 }
 
@@ -248,11 +322,14 @@ impl Expr {
         span: (usize, usize),
     ) -> TypingResult<&'a Bindable> {
         match ctx.find_self_by_name(name) {
-            Some(binding) => Ok(&binding.1),
+            Some(binding) => Ok(&binding.bindable),
             None => Err(TypingErr::UnboundVar { span }),
         }
     }
 
+    /// Converts the expression to a typed expression with unsolved constraints.
+    /// The constraints will be stored in the context, and can be solved later
+    /// using `unify_constraints`.
     pub fn to_typed_with_unsolved_constraints(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
         match self {
             Expr::Unit { span } => Ok(TExpr::unit(span.clone())),
@@ -311,7 +388,7 @@ impl Expr {
                 let func_ty = func_typed.ty();
                 let arg_ty = arg_typed.ty();
                 let ret_ty = Box::new(Type::TypeVar {
-                    index: ctx.fresh_var(),
+                    index: ctx.alloc_type_var(),
                 });
                 let constr = Constraint {
                     lhs: func_ty.clone(),
@@ -346,12 +423,13 @@ impl Expr {
         }
     }
 
+    /// Converts the expression to a typed expression with solved constraints.
     pub fn to_typed(&self) -> TypingResult<TExpr> {
         let ctx = Context::new_with_builtins();
         let mut expr = self.to_typed_with_unsolved_constraints(ctx.clone())?;
-        let mut constraints: std::collections::VecDeque<_> =
-            ctx.constraints().borrow().clone().into_iter().collect();
-        let subs = unify_constraints(&mut constraints)?;
+        let state = ctx.state();
+        let cons = &mut state.borrow_mut().constraints;
+        let subs = unify_constraints(cons)?;
         subs.apply_to_ast(&mut expr);
         Ok(expr)
     }
@@ -474,14 +552,16 @@ pub fn unify_constraints(
                     kind: ConstraintKind::Unify,
                 });
             }
-            (Type::Tuple { elems: elems1 }, Type::Tuple { elems: elems2 }) => {
+            (
+                ref lhs @ Type::Tuple { elems: ref elems1 },
+                ref rhs @ Type::Tuple { elems: ref elems2 },
+            ) => {
                 // Unify the elements of the tuples
                 if elems1.len() != elems2.len() {
-                    return Err(TypingErr::ErrorMsg(format!(
-                        "Cannot unify tuples of different lengths: {} and {}",
-                        elems1.len(),
-                        elems2.len()
-                    )));
+                    return Err(TypingErr::CannotUnify {
+                        lhs: lhs.clone(),
+                        rhs: rhs.clone(),
+                    });
                 }
                 for (e1, e2) in elems1.iter().zip(elems2.iter()) {
                     constraints.push_back(Constraint {
@@ -497,10 +577,7 @@ pub fn unify_constraints(
             }
             (lhs, rhs) => {
                 // If we reach here, we have an unresolvable constraint
-                return Err(TypingErr::ErrorMsg(format!(
-                    "Cannot unify types: {} and {}",
-                    lhs, rhs
-                )));
+                return Err(TypingErr::CannotUnify { lhs, rhs });
             }
         }
     }

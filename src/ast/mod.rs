@@ -1,8 +1,10 @@
 pub mod display;
+/// The typed ast. Differs from the untyped ast in that it has type info on
+/// the nodes and is desugared a little bit.
 pub mod typed;
 pub mod visitor;
 
-use crate::{ast::visitor::Visitor, parser::exprs::Prec};
+use crate::{ast::{typed::ScopeName, visitor::Visitor}, parser::exprs::Prec};
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 
@@ -120,6 +122,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
+    pub name: ScopeName,
     pub span: (usize, usize),
 }
 

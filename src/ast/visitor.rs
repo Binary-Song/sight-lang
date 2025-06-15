@@ -1,4 +1,3 @@
-
 use crate::ast::AST;
 
 pub trait Visitor<E> {
@@ -170,7 +169,7 @@ impl AST for crate::ast::typed::Type {
     fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E> {
         visitor.visit_ttype(self)?;
         match self {
-             crate::ast::typed::Type::Bool
+            crate::ast::typed::Type::Bool
             | crate::ast::typed::Type::Int
             | crate::ast::typed::Type::TypeVar { index: _ } => Ok(()),
             crate::ast::typed::Type::Arrow { lhs, rhs } => {
@@ -192,11 +191,15 @@ impl AST for crate::ast::typed::Pattern {
     fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E> {
         visitor.visit_tpat(self)?;
         match self {
-            crate::ast::typed::Pattern::Var { name: _, ty, span: _ } => {
+            crate::ast::typed::Pattern::Var {
+                name: _,
+                ty,
+                span: _,
+            } => {
                 ty.accept(visitor)?;
                 Ok(())
             }
-            crate::ast::typed::Pattern::Tuple { elems, ty, span: _   } => {
+            crate::ast::typed::Pattern::Tuple { elems, ty, span: _ } => {
                 ty.accept(visitor)?;
                 for elem in elems {
                     elem.accept(visitor)?;
@@ -212,33 +215,45 @@ impl AST for crate::ast::typed::Expr {
         visitor.visit_texpr(self)?;
         match self {
             crate::ast::typed::Expr::Lit { value: _, span: _ } => Ok(()),
-            crate::ast::typed::Expr::Var { name: _, span: _, ty } => {
+            crate::ast::typed::Expr::Var {
+                name: _,
+                span: _,
+                ty,
+            } => {
                 ty.accept(visitor)?;
                 Ok(())
-            },
+            }
             crate::ast::typed::Expr::Application {
-                callee, arg, ty,
+                callee,
+                arg,
+                ty,
                 cons: _,
-                span: _,  
+                span: _,
             } => {
                 callee.accept(visitor)?;
                 arg.accept(visitor)?;
                 ty.accept(visitor)?;
                 Ok(())
             }
-            crate::ast::typed::Expr::Let { lhs, rhs, body, span:_, cons:_   } => {
+            crate::ast::typed::Expr::Let {
+                lhs,
+                rhs,
+                body,
+                span: _,
+                cons: _,
+            } => {
                 lhs.accept(visitor)?;
                 rhs.accept(visitor)?;
                 body.accept(visitor)
             }
-            crate::ast::typed::Expr::Seq { seq, ty, span:_, } => {
+            crate::ast::typed::Expr::Seq { seq, ty, span: _ } => {
                 ty.accept(visitor)?;
                 for expr in seq {
                     expr.accept(visitor)?;
                 }
                 Ok(())
             }
-            crate::ast::typed::Expr::Tuple { elems, ty, span:_, } => {
+            crate::ast::typed::Expr::Tuple { elems, ty, span: _ } => {
                 ty.accept(visitor)?;
                 for elem in elems {
                     elem.accept(visitor)?;
