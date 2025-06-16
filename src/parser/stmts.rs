@@ -1,4 +1,4 @@
-use crate::ast::typed::ScopeName;
+use crate::ast::typed::Name;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::*;
@@ -193,12 +193,12 @@ impl<'a> Parser<'a> {
             stmts,
             span,
             name: match name {
-                Some(name) => ScopeName::Name(name),
+                Some(name) => Name::String(name),
                 None => {
                     // !!! Important: if parsing failed, we do not bump the block count.
                     let block_index = self.block_count.value();
                     self.block_count.set(block_index + 1);
-                    ScopeName::Index(block_index)
+                    Name::Index(block_index)
                 }
             },
         });

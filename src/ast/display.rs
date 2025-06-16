@@ -171,6 +171,27 @@ impl Display for typed::Lit {
     }
 }
 
+impl Display for typed::Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            typed::Name::String(name) => write!(f, "{name}"),
+            typed::Name::Index(index) => write!(f, "{index}"),
+        }
+    }
+}
+
+impl Display for typed::QualifiedName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, part) in self.names.iter().enumerate() {
+            if i > 0 {
+                write!(f, ".")?;
+            }
+            write!(f, "{part}")?;
+        }
+        Ok(())
+    }
+}
+
 impl Display for typed::Func {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -225,7 +246,7 @@ impl Display for typed::Expr {
         match self {
             TExpr::Lit { value, .. } => write!(f, "{value}"),
             TExpr::Var { name, .. } => write!(f, "{name}"),
-            TExpr::Application { callee, arg, .. } => write!(f, "{} {}", callee, arg),
+            TExpr::App { callee, arg, .. } => write!(f, "{} {}", callee, arg),
             TExpr::Let { lhs, rhs, body, .. } => {
                 write!(f, "let {} = {} in ({})", lhs, rhs, body)
             }
@@ -246,16 +267,6 @@ impl Display for typed::Expr {
                 write!(f, ")")
             }
             TExpr::Func { func } => write!(f, "{}", func),
-          
-        }
-    }
-}
-
-impl Display for typed::ScopeName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            typed::ScopeName::Name(x) => write!(f, "{x}"),
-            typed::ScopeName::Index(x) => write!(f, "{x}"),
         }
     }
 }

@@ -43,7 +43,7 @@ impl Span for typed::Expr {
             | typed::Expr::Let { span, .. }
             | typed::Expr::Seq { span, .. }
             | typed::Expr::Tuple { span, .. }
-            | typed::Expr::Application { span, .. } => *span,
+            | typed::Expr::App { span, .. } => *span,
             typed::Expr::Func { func, .. } => func.span,
         }
     }

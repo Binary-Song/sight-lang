@@ -1,4 +1,7 @@
-use crate::{ast::UnaryOp, parser::context::ConstraintHandle};
+use crate::{
+    ast::UnaryOp,
+    parser::context::{ConstraintHandle, Path},
+};
 use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -7,9 +10,58 @@ pub enum Lit {
     Bool(bool),
 }
 
+/// A sequence of names. Used as an global identifier for items.
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub struct QualifiedName {
+    pub names: Vec<Name>,
+}
+
+impl QualifiedName {
+    pub fn new() -> Self {
+        Self { names: vec![] }
+    }
+
+    pub fn new_from_vec(names: Vec<Name>) -> Self {
+        Self { names }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        let names: Vec<Name> = name
+            .split('.')
+            .map(|s| {
+                if let Ok(index) = s.parse::<usize>() {
+                    Name::Index(index)
+                } else {
+                    Name::String(s.to_string())
+                }
+            })
+            .collect();
+        if names.is_empty() {
+            None
+        } else {
+            Some(Self { names })
+        }
+    }
+}
+
+/// An element of QualifiedName.
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub enum Name {
+    /// A string name. Must be unique within the scope.
+    String(String),
+    /// Used to identify an unnamed scope.
+    Index(usize),
+}
+
+impl From<String> for Name {
+    fn from(name: String) -> Self {
+        Name::String(name)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Func {
-    pub name: String,
+    pub name: QualifiedName,
     pub param: Pattern,
     pub ret_ty: Type,
     pub func_ty: Type,
@@ -41,12 +93,6 @@ impl Pattern {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue, )]
-pub enum ScopeName {
-    Name(String),
-    Index(usize),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Expr {
     Lit {
@@ -58,8 +104,9 @@ pub enum Expr {
         name: String,
         span: (usize, usize),
         ty: Type,
+        path: Path,
     },
-    Application {
+    App {
         callee: Box<Expr>,
         arg: Box<Expr>,
         ty: Type,
@@ -166,7 +213,7 @@ impl Typed for Expr {
         match self {
             Expr::Lit { value, .. } => value.ty(),
             Expr::Var { ty, .. }
-            | Expr::Application { ty, .. }
+            | Expr::App { ty, .. }
             | Expr::Seq { ty, .. }
             | Expr::Tuple { ty, .. } => ty.clone(),
             Expr::Let { .. } | Expr::Func { .. } => Type::unit(),
@@ -176,7 +223,7 @@ impl Typed for Expr {
         match self {
             Expr::Lit { .. } => None,
             Expr::Var { ty, .. }
-            | Expr::Application { ty, .. }
+            | Expr::App { ty, .. }
             | Expr::Seq { ty, .. }
             | Expr::Tuple { ty, .. } => Some(ty),
             Expr::Let { .. } | Expr::Func { .. } => None,

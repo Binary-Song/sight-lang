@@ -4,7 +4,7 @@ pub mod display;
 pub mod typed;
 pub mod visitor;
 
-use crate::{ast::{typed::ScopeName, visitor::Visitor}, parser::exprs::Prec};
+use crate::{ast::{typed::Name, visitor::Visitor}, parser::exprs::Prec};
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 
@@ -122,7 +122,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
-    pub name: ScopeName,
+    pub name: Name,
     pub span: (usize, usize),
 }
 

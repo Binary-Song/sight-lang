@@ -1,5 +1,6 @@
 use crate::ast::typed::{self, Typed};
 use crate::ast::visitor::Visitor;
+use crate::parser::context::Path;
 use crate::parser::context::{ConstraintHandle, Context};
 use crate::parser::Parser;
 use crate::sema::typing::{unify_constraints, TypingErr};
@@ -57,9 +58,9 @@ mod cases {
     use super::check_type_inference_result_dummy;
     use crate::ast::typed;
     use crate::ast::typed::*;
-    use crate::parser::context::Bindable;
     use crate::parser::context::Binding;
     use crate::parser::context::ConstraintHandle;
+    use crate::parser::context::Path;
     use crate::sema::testing::expect_typing_error;
     use crate::sema::typing::TypingErr;
     #[test]
@@ -117,6 +118,7 @@ mod cases {
                                 ty: Type::Tuple {
                                     elems: vec![Type::Int, Type::Int],
                                 },
+                                path: Path::LocalVar { index: 0 },
                             }),
                             body: Box::new(Expr::Seq {
                                 seq: vec![Expr::unit((35, 36))],
@@ -139,12 +141,14 @@ mod cases {
     }
 
     #[test]
-    fn type_expr_recur_fn() {
+    fn recur_fn() {
         let ex = Expr::Seq {
             seq: vec![
                 Expr::Func {
                     func: Box::new(Func {
-                        name: "a".to_string(),
+                        name: QualifiedName {
+                            names: vec![Name::Index(0), Name::String("a".to_string())],
+                        },
                         param: Pattern::Tuple {
                             elems: vec![],
                             ty: Type::Tuple { elems: vec![] },
@@ -156,13 +160,21 @@ mod cases {
                             rhs: Box::new(Type::Int),
                         },
                         body: Expr::Seq {
-                            seq: vec![Expr::Application {
+                            seq: vec![Expr::App {
                                 callee: Box::new(Expr::Var {
                                     name: "b".to_string(),
                                     span: (31, 32),
                                     ty: Type::Arrow {
                                         lhs: Box::new(Type::Tuple { elems: vec![] }),
                                         rhs: Box::new(Type::Int),
+                                    },
+                                    path: Path::Func {
+                                        qual_name: QualifiedName {
+                                            names: vec![
+                                                Name::Index(0),
+                                                Name::String("b".to_string()),
+                                            ],
+                                        },
                                     },
                                 }),
                                 arg: Box::new(Expr::Tuple {
@@ -182,7 +194,9 @@ mod cases {
                 },
                 Expr::Func {
                     func: Box::new(Func {
-                        name: "b".to_string(),
+                        name: QualifiedName {
+                            names: vec![Name::Index(0), Name::String("b".to_string())],
+                        },
                         param: Pattern::Tuple {
                             elems: vec![],
                             ty: Type::Tuple { elems: vec![] },
@@ -194,13 +208,21 @@ mod cases {
                             rhs: Box::new(Type::Int),
                         },
                         body: Expr::Seq {
-                            seq: vec![Expr::Application {
+                            seq: vec![Expr::App {
                                 callee: Box::new(Expr::Var {
                                     name: "a".to_string(),
                                     span: (54, 55),
                                     ty: Type::Arrow {
                                         lhs: Box::new(Type::Tuple { elems: vec![] }),
                                         rhs: Box::new(Type::Int),
+                                    },
+                                    path: Path::Func {
+                                        qual_name: QualifiedName {
+                                            names: vec![
+                                                Name::Index(0),
+                                                Name::String("a".to_string()),
+                                            ],
+                                        },
                                     },
                                 }),
                                 arg: Box::new(Expr::Tuple {
@@ -224,13 +246,18 @@ mod cases {
                         ty: Type::Int,
                         span: (6, 7),
                     },
-                    rhs: Box::new(Expr::Application {
+                    rhs: Box::new(Expr::App {
                         callee: Box::new(Expr::Var {
                             name: "b".to_string(),
                             span: (10, 11),
                             ty: Type::Arrow {
                                 lhs: Box::new(Type::Tuple { elems: vec![] }),
                                 rhs: Box::new(Type::Int),
+                            },
+                            path: Path::Func {
+                                qual_name: QualifiedName {
+                                    names: vec![Name::Index(0), Name::String("b".to_string())],
+                                },
                             },
                         }),
                         arg: Box::new(Expr::Tuple {
@@ -265,10 +292,380 @@ mod cases {
     }
 
     #[test]
-    fn type_expr_dup_names() {
+    fn dup_names() {
         expect_typing_error("{ fn a() -> () {} fn a() -> () {} }", |err| match err {
             TypingErr::DuplicateBinding { .. } => true,
             _ => false,
         });
+    }
+
+    #[test]
+    fn nested_fn1() {
+        check_type_inference_result(
+            "{
+                fn a() -> () {
+                    fn b() -> () {
+                        fn a() -> () {}
+                        a();
+                        b();
+                    }
+                    fn d() -> () { d() } 
+                }
+            }",
+            Expr::Seq {
+                seq: vec![
+                    Expr::Func {
+                        func: Box::new(Func {
+                            name: QualifiedName {
+                                names: vec![Name::Index(0), Name::String("a".to_string())],
+                            },
+                            param: Pattern::Tuple {
+                                elems: vec![],
+                                ty: Type::Tuple { elems: vec![] },
+                                span: (22, 24),
+                            },
+                            ret_ty: Type::Tuple { elems: vec![] },
+                            func_ty: Type::Arrow {
+                                lhs: Box::new(Type::Tuple { elems: vec![] }),
+                                rhs: Box::new(Type::Tuple { elems: vec![] }),
+                            },
+                            body: Expr::Seq {
+                                seq: vec![
+                                    Expr::Func {
+                                        func: Box::new(Func {
+                                            name: QualifiedName {
+                                                names: vec![
+                                                    Name::Index(0),
+                                                    Name::String("a".to_string()),
+                                                    Name::String("b".to_string()),
+                                                ],
+                                            },
+                                            param: Pattern::Tuple {
+                                                elems: vec![],
+                                                ty: Type::Tuple { elems: vec![] },
+                                                span: (57, 59),
+                                            },
+                                            ret_ty: Type::Tuple { elems: vec![] },
+                                            func_ty: Type::Arrow {
+                                                lhs: Box::new(Type::Tuple { elems: vec![] }),
+                                                rhs: Box::new(Type::Tuple { elems: vec![] }),
+                                            },
+                                            body: Expr::Seq {
+                                                seq: vec![
+                                                    Expr::Func {
+                                                        func: Box::new(Func {
+                                                            name: QualifiedName {
+                                                                names: vec![
+                                                                    Name::Index(0),
+                                                                    Name::String("a".to_string()),
+                                                                    Name::String("b".to_string()),
+                                                                    Name::String("a".to_string()),
+                                                                ],
+                                                            },
+                                                            param: Pattern::Tuple {
+                                                                elems: vec![],
+                                                                ty: Type::Tuple { elems: vec![] },
+                                                                span: (96, 98),
+                                                            },
+                                                            ret_ty: Type::Tuple { elems: vec![] },
+                                                            func_ty: Type::Arrow {
+                                                                lhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                                rhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                            },
+                                                            body: Expr::Seq {
+                                                                seq: vec![Expr::Tuple {
+                                                                    elems: vec![],
+                                                                    ty: Type::Tuple {
+                                                                        elems: vec![],
+                                                                    },
+                                                                    span: (106, 107),
+                                                                }],
+                                                                ty: Type::Tuple { elems: vec![] },
+                                                                span: (107, 107),
+                                                            },
+                                                            span: (92, 107),
+                                                        }),
+                                                    },
+                                                    Expr::App {
+                                                        callee: Box::new(Expr::Var {
+                                                            name: "a".to_string(),
+                                                            span: (132, 133),
+                                                            ty: Type::Arrow {
+                                                                lhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                                rhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                            },
+                                                            path: Path::Func {
+                                                                qual_name: QualifiedName {
+                                                                    names: vec![
+                                                                        Name::Index(0),
+                                                                        Name::String(
+                                                                            "a".to_string(),
+                                                                        ),
+                                                                        Name::String(
+                                                                            "b".to_string(),
+                                                                        ),
+                                                                        Name::String(
+                                                                            "a".to_string(),
+                                                                        ),
+                                                                    ],
+                                                                },
+                                                            },
+                                                        }),
+                                                        arg: Box::new(Expr::Tuple {
+                                                            elems: vec![],
+                                                            ty: Type::Tuple { elems: vec![] },
+                                                            span: (133, 135),
+                                                        }),
+                                                        ty: Type::Tuple { elems: vec![] },
+                                                        cons: ConstraintHandle::new(0),
+                                                        span: (132, 135),
+                                                    },
+                                                    Expr::App {
+                                                        callee: Box::new(Expr::Var {
+                                                            name: "b".to_string(),
+                                                            span: (161, 162),
+                                                            ty: Type::Arrow {
+                                                                lhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                                rhs: Box::new(Type::Tuple {
+                                                                    elems: vec![],
+                                                                }),
+                                                            },
+                                                            path: Path::Func {
+                                                                qual_name: QualifiedName {
+                                                                    names: vec![
+                                                                        Name::Index(0),
+                                                                        Name::String(
+                                                                            "a".to_string(),
+                                                                        ),
+                                                                        Name::String(
+                                                                            "b".to_string(),
+                                                                        ),
+                                                                    ],
+                                                                },
+                                                            },
+                                                        }),
+                                                        arg: Box::new(Expr::Tuple {
+                                                            elems: vec![],
+                                                            ty: Type::Tuple { elems: vec![] },
+                                                            span: (162, 164),
+                                                        }),
+                                                        ty: Type::Tuple { elems: vec![] },
+                                                        cons: ConstraintHandle::new(1),
+                                                        span: (161, 164),
+                                                    },
+                                                    Expr::Tuple {
+                                                        elems: vec![],
+                                                        ty: Type::Tuple { elems: vec![] },
+                                                        span: (186, 187),
+                                                    },
+                                                ],
+                                                ty: Type::Tuple { elems: vec![] },
+                                                span: (187, 187),
+                                            },
+                                            span: (53, 187),
+                                        }),
+                                    },
+                                    Expr::Func {
+                                        func: Box::new(Func {
+                                            name: QualifiedName {
+                                                names: vec![
+                                                    Name::Index(0),
+                                                    Name::String("a".to_string()),
+                                                    Name::String("d".to_string()),
+                                                ],
+                                            },
+                                            param: Pattern::Tuple {
+                                                elems: vec![],
+                                                ty: Type::Tuple { elems: vec![] },
+                                                span: (212, 214),
+                                            },
+                                            ret_ty: Type::Tuple { elems: vec![] },
+                                            func_ty: Type::Arrow {
+                                                lhs: Box::new(Type::Tuple { elems: vec![] }),
+                                                rhs: Box::new(Type::Tuple { elems: vec![] }),
+                                            },
+                                            body: Expr::Seq {
+                                                seq: vec![Expr::App {
+                                                    callee: Box::new(Expr::Var {
+                                                        name: "d".to_string(),
+                                                        span: (223, 224),
+                                                        ty: Type::Arrow {
+                                                            lhs: Box::new(Type::Tuple {
+                                                                elems: vec![],
+                                                            }),
+                                                            rhs: Box::new(Type::Tuple {
+                                                                elems: vec![],
+                                                            }),
+                                                        },
+                                                        path: Path::Func {
+                                                            qual_name: QualifiedName {
+                                                                names: vec![
+                                                                    Name::Index(0),
+                                                                    Name::String("a".to_string()),
+                                                                    Name::String("d".to_string()),
+                                                                ],
+                                                            },
+                                                        },
+                                                    }),
+                                                    arg: Box::new(Expr::Tuple {
+                                                        elems: vec![],
+                                                        ty: Type::Tuple { elems: vec![] },
+                                                        span: (224, 226),
+                                                    }),
+                                                    ty: Type::Tuple { elems: vec![] },
+                                                    cons: ConstraintHandle::new(2),
+                                                    span: (223, 226),
+                                                }],
+                                                ty: Type::Tuple { elems: vec![] },
+                                                span: (228, 228),
+                                            },
+                                            span: (208, 228),
+                                        }),
+                                    },
+                                    Expr::Tuple {
+                                        elems: vec![],
+                                        ty: Type::Tuple { elems: vec![] },
+                                        span: (246, 247),
+                                    },
+                                ],
+                                ty: Type::Tuple { elems: vec![] },
+                                span: (247, 247),
+                            },
+                            span: (18, 247),
+                        }),
+                    },
+                    Expr::Tuple {
+                        elems: vec![],
+                        ty: Type::Tuple { elems: vec![] },
+                        span: (260, 261),
+                    },
+                ],
+                ty: Type::Tuple { elems: vec![] },
+                span: (261, 261),
+            },
+        );
+    }
+
+    #[test]
+    fn nested_fn2() {
+        check_type_inference_result(
+            "{ { fn a () -> () {  } } { fn b () -> () {  } }  }",
+            Expr::Seq {
+                seq: vec![
+                    Expr::Seq {
+                        seq: vec![
+                            Expr::Func {
+                                func: Box::new(Func {
+                                    name: QualifiedName {
+                                        names: vec![
+                                            Name::Index(0),
+                                            Name::Index(0),
+                                            Name::String("a".to_string()),
+                                        ],
+                                    },
+                                    param: Pattern::Tuple {
+                                        elems: vec![],
+                                        ty: Type::Tuple { elems: vec![] },
+                                        span: (9, 11),
+                                    },
+                                    ret_ty: Type::Tuple { elems: vec![] },
+                                    func_ty: Type::Arrow {
+                                        lhs: Box::new(Type::Tuple { elems: vec![] }),
+                                        rhs: Box::new(Type::Tuple { elems: vec![] }),
+                                    },
+                                    body: Expr::Seq {
+                                        seq: vec![Expr::Tuple {
+                                            elems: vec![],
+                                            ty: Type::Tuple { elems: vec![] },
+                                            span: (21, 22),
+                                        }],
+                                        ty: Type::Tuple { elems: vec![] },
+                                        span: (22, 22),
+                                    },
+                                    span: (4, 22),
+                                }),
+                            },
+                            Expr::Tuple {
+                                elems: vec![],
+                                ty: Type::Tuple { elems: vec![] },
+                                span: (23, 24),
+                            },
+                        ],
+                        ty: Type::Tuple { elems: vec![] },
+                        span: (24, 24),
+                    },
+                    Expr::Seq {
+                        seq: vec![
+                            Expr::Func {
+                                func: Box::new(Func {
+                                    name: QualifiedName {
+                                        names: vec![
+                                            Name::Index(0),
+                                            Name::Index(1),
+                                            Name::String("b".to_string()),
+                                        ],
+                                    },
+                                    param: Pattern::Tuple {
+                                        elems: vec![],
+                                        ty: Type::Tuple { elems: vec![] },
+                                        span: (32, 34),
+                                    },
+                                    ret_ty: Type::Tuple { elems: vec![] },
+                                    func_ty: Type::Arrow {
+                                        lhs: Box::new(Type::Tuple { elems: vec![] }),
+                                        rhs: Box::new(Type::Tuple { elems: vec![] }),
+                                    },
+                                    body: Expr::Seq {
+                                        seq: vec![Expr::Tuple {
+                                            elems: vec![],
+                                            ty: Type::Tuple { elems: vec![] },
+                                            span: (44, 45),
+                                        }],
+                                        ty: Type::Tuple { elems: vec![] },
+                                        span: (45, 45),
+                                    },
+                                    span: (27, 45),
+                                }),
+                            },
+                            Expr::Tuple {
+                                elems: vec![],
+                                ty: Type::Tuple { elems: vec![] },
+                                span: (46, 47),
+                            },
+                        ],
+                        ty: Type::Tuple { elems: vec![] },
+                        span: (47, 47),
+                    },
+                    Expr::Tuple {
+                        elems: vec![],
+                        ty: Type::Tuple { elems: vec![] },
+                        span: (49, 50),
+                    },
+                ],
+                ty: Type::Tuple { elems: vec![] },
+                span: (50, 50),
+            },
+        )
+    }
+
+    #[test]
+    fn nested_fn_cannot_access_outer_vars() {
+        expect_typing_error(
+            "{ fn a() -> () { let b = 1; fn c() -> int { b } } }",
+            |err| match err {
+                TypingErr::UnboundVar { .. } => true,
+                _ => false,
+            },
+        );
     }
 }

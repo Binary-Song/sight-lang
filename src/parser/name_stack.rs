@@ -1,55 +1,57 @@
-use crate::{ast::typed::ScopeName, parser::PropertyStack};
+use crate::{
+    ast::typed::{self, Name, QualifiedName},
+    parser::PropertyStack,
+};
 
 pub struct NameStack {
-    stack: PropertyStack<ScopeName>,
+    stack: Vec<Name>,
 }
 
 impl Default for NameStack {
     fn default() -> Self {
-        NameStack::new(ScopeName::Index(0))
+        NameStack::new()
     }
 }
 
 impl NameStack {
-    pub fn new(init: ScopeName) -> Self {
-        NameStack {
-            stack: PropertyStack::new(init),
-        }
+    pub fn new() -> Self {
+        NameStack { stack: Vec::new() }
     }
 
-    pub fn push(&mut self, name: ScopeName) {
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
+
+    pub fn push(&mut self, name: Name) {
         self.stack.push(name)
     }
 
     pub fn pop(&mut self) {
-        self.stack.pop()
+        self.stack.pop();
     }
 
-    pub fn set(&mut self, name: ScopeName) {
-        self.stack.set(name)
+    pub fn prefix(&self) -> QualifiedName {
+        self.stack
+            .iter()
+            .fold(QualifiedName::new(), |mut acc, name| {
+                acc.names.push(name.clone());
+                acc
+            })
     }
 
-    pub fn prefix(&self) -> String {
-        self.stack.iter().fold(String::new(), |mut acc, name| {
-            if !acc.is_empty() {
-                acc.push('.');
-            }
-            match name {
-                ScopeName::Name(n) => acc.push_str(&n),
-                ScopeName::Index(i) => acc.push_str(&i.to_string()),
-            }
-            acc
-        })
+    pub fn qualify(&self, suffix: typed::Name) -> QualifiedName {
+        let mut qualified = self.prefix();
+        qualified.names.push(suffix);
+        qualified
     }
+}
 
-    pub fn qualify_name(&self, suffix: &str) -> String {
-        format!("{}.{}", self.prefix(), suffix)
-    }
-
-    pub fn guarded_push<R>(&mut self, value: ScopeName, scope: impl FnOnce() -> R) -> R {
-        self.push(value);
-        let result = scope();
-        self.pop();
-        result
+impl Drop for NameStack {
+    fn drop(&mut self) {
+        if !self.stack.is_empty() {
+            panic!(
+                "Logic error: NameStack should be empty on drop. Push/pop imbalance is a serious bug!"
+            );
+        }
     }
 }

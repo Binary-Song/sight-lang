@@ -219,11 +219,12 @@ impl AST for crate::ast::typed::Expr {
                 name: _,
                 span: _,
                 ty,
+                path: _,
             } => {
                 ty.accept(visitor)?;
                 Ok(())
             }
-            crate::ast::typed::Expr::Application {
+            crate::ast::typed::Expr::App {
                 callee,
                 arg,
                 ty,

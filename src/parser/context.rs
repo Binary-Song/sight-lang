@@ -1,14 +1,21 @@
+use sight_macros::LiteralValue;
+
 use crate::{
-    ast::typed::{ScopeName, Type},
+    ast::typed::{self, Name, QualifiedName, Type},
     parser::{NameStack, PropertyStack},
     LiteralValue,
 };
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Bindable {
-    Var { ty: Type, local_var_index: usize },
-    Func { ty: Type, global_name: String },
+/// The Path contains enough information for the back-end to
+/// generate an unambiguous reference to an entity.
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub enum Path {
+    /// To reference a local variable, we just need to know the var's index.
+    /// i.e. stack position.
+    LocalVar { index: usize },
+    /// To reference a function, we need to know its full name.
+    Func { qual_name: QualifiedName },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +35,8 @@ pub struct Constraint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binding {
     pub name: String,
-    pub bindable: Bindable,
+    pub path: Path,
+    pub ty: Type,
     pub span: Option<(usize, usize)>,
 }
 
@@ -219,7 +227,7 @@ impl Context {
         }
     }
 
-    pub fn find_self_by_name(&self, name: &str) -> Option<&Binding> {
+    pub fn lookup(&self, name: &str) -> Option<&Binding> {
         let mut i = 0;
         loop {
             match self.get(i) {
@@ -280,8 +288,8 @@ impl Context {
         index
     }
 
-    pub fn qualify_name(&self, name: &str) -> String {
-        self.state_ref().name_stack.qualify_name(name)
+    pub fn qualify(&self, name: typed::Name) -> QualifiedName {
+        self.state_ref().name_stack.qualify(name)
     }
 
     // pub fn push_function_scope
@@ -307,214 +315,92 @@ impl<'a> IntoIterator for &'a Context {
         self.iter()
     }
 }
-
-impl Bindable {
-    pub fn get_type(&self) -> Type {
-        match self {
-            Bindable::Var { ty, .. } => ty.clone(),
-            Bindable::Func { ty, .. } => ty.clone(),
-        }
-    }
-}
-
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
-    fn dummy_type() -> Type {
-        Type::unit()
-    }
-
-    #[test]
-    fn test_new_context() {
-        let ctx = Context::new();
-        assert_eq!(ctx.len(), 0);
-    }
-
-    #[test]
-    fn test_make_child() {
-        let parent = Context::new();
-        let child = parent.make_child();
-        assert_eq!(child.len(), 0);
-    }
-
-    #[test]
-    fn test_add_binding_and_len() {
-        let ctx = Context::new();
-        let binding = Binding {
-            name: "x".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
+    fn dummy_binding(name: &str) -> Binding {
+        Binding {
+            name: name.to_string(),
+            path: Path::LocalVar { index: 0 },
+            ty: Type::unit(),
             span: None,
-        };
-        let ctx2 = ctx.add_binding(binding.clone());
-        assert_eq!(ctx2.len(), 1);
-        match ctx2.get(0) {
-            GetResult::Ok(b) => assert_eq!(b, &binding),
-            _ => panic!("Binding not found"),
         }
     }
 
     #[test]
-    fn test_add_bindings() {
+    fn test_context_add_and_lookup_binding() {
         let ctx = Context::new();
-        let b1 = Binding {
-            name: "a".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
-            span: None,
-        };
-        let b2 = Binding {
-            name: "b".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
-            span: None,
-        };
-        let ctx2 = ctx.add_bindings(vec![b1.clone(), b2.clone()]);
-        assert_eq!(ctx2.len(), 2);
-        assert_eq!(ctx2.get(0), GetResult::Ok(&b2));
-        assert_eq!(ctx2.get(1), GetResult::Ok(&b1));
-    }
-
-    fn filter_only_x(binding: &Binding) -> bool {
-        binding.name == "x"
+        let binding = dummy_binding("x");
+        let ctx = ctx.add_binding(binding.clone());
+        assert_eq!(ctx.lookup("x"), Some(&binding));
+        assert_eq!(ctx.lookup("y"), None);
     }
 
     #[test]
-    fn test_add_fn_filter() {
-        let binding = Context::new();
-        let ctx = binding.add_binding(Binding {
-            name: "x".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
-            span: None,
-        });
-        let filtered_ctx = ctx.add_fn_filter(filter_only_x);
-        assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
+    fn test_context_len() {
+        let ctx = Context::new();
+        assert_eq!(ctx.len(), 0);
+        let ctx = ctx.add_binding(dummy_binding("a"));
+        assert_eq!(ctx.len(), 1);
+        let ctx = ctx.add_binding(dummy_binding("b"));
+        assert_eq!(ctx.len(), 2);
     }
 
     #[test]
-    fn test_add_closure_filter() {
-        let binding = Context::new();
-        let ctx = binding.add_binding(Binding {
-            name: "y".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
-            span: None,
-        });
-        let filter = Rc::new(|b: &Binding| b.name == "y");
-        let filtered_ctx = ctx.add_closure_filter(filter);
-        assert!(matches!(filtered_ctx.get(0), GetResult::Ok(_)));
-    }
-
-    #[test]
-    fn test_iter() {
-        let binding = Context::new();
-        let ctx = binding.add_bindings(vec![
-            Binding {
-                name: "a".to_string(),
-                bindable: Bindable::Var {
-                    ty: (dummy_type()),
-                    local_var_index: 0,
-                },
-                span: None,
-            },
-            Binding {
-                name: "b".to_string(),
-                bindable: Bindable::Var {
-                    ty: (dummy_type()),
-                    local_var_index: 0,
-                },
-                span: None,
-            },
-        ]);
+    fn test_context_iter() {
+        let ctx = Context::new()
+            .add_binding(dummy_binding("a"))
+            .add_binding(dummy_binding("b"));
         let names: Vec<_> = ctx.iter().map(|b| b.name.clone()).collect();
         assert_eq!(names, vec!["b".to_string(), "a".to_string()]);
     }
 
     #[test]
-    fn test_get_out_of_bounds() {
+    fn test_context_parent_lookup() {
+        let parent = Context::new().add_binding(dummy_binding("p"));
+        let child = parent.clone().add_binding(dummy_binding("c"));
+        assert_eq!(child.lookup("p").unwrap().name, "p");
+        assert_eq!(child.lookup("c").unwrap().name, "c");
+        assert_eq!(parent.lookup("c"), None);
+    }
+
+    #[test]
+    fn test_context_fn_filter() {
+        let ctx = Context::new()
+            .add_binding(dummy_binding("a"))
+            .add_binding(dummy_binding("b"));
+        let filter = |b: &Binding| b.name == "b";
+        let filtered_ctx = ctx.add_fn_filter(filter);
+        assert_eq!(filtered_ctx.lookup("b").unwrap().name, "b");
+        assert_eq!(filtered_ctx.lookup("a"), None);
+    }
+
+    #[test]
+    fn test_context_closure_filter() {
+        let ctx = Context::new()
+            .add_binding(dummy_binding("x"))
+            .add_binding(dummy_binding("y"));
+        let filter = Rc::new(|b: &Binding| b.name == "x");
+        let filtered_ctx = ctx.add_closure_filter(filter);
+        assert_eq!(filtered_ctx.lookup("x").unwrap().name, "x");
+        assert_eq!(filtered_ctx.lookup("y"), None);
+    }
+
+    #[test]
+    fn test_alloc_type_var_increments() {
         let ctx = Context::new();
-        assert!(matches!(ctx.get(0), GetResult::OutOfBounds));
+        let a = ctx.alloc_type_var();
+        let b = ctx.alloc_type_var();
+        assert_eq!(a + 1, b);
     }
 
     #[test]
-    fn test_find_self_by_name() {
-        let binding = Context::new();
-        let ctx = binding.add_bindings(vec![
-            Binding {
-                name: "foo".to_string(),
-                bindable: Bindable::Var {
-                    ty: (dummy_type()),
-                    local_var_index: 0,
-                },
-                span: None,
-            },
-            Binding {
-                name: "bar".to_string(),
-                bindable: Bindable::Var {
-                    ty: dummy_type(),
-                    local_var_index: 0,
-                },
-                span: None,
-            },
-        ]);
-        let found = ctx.find_self_by_name("foo");
-        assert!(found.is_some());
-        assert_eq!(found.unwrap().name, "foo");
-        assert!(ctx.find_self_by_name("baz").is_none());
-    }
-
-    #[test]
-    fn test_bindable_get_type() {
-        let ty = dummy_type();
-        let b = Bindable::Var {
-            ty: (ty.clone()),
-            local_var_index: 0,
-        };
-        assert_eq!(b.get_type(), ty);
-        let b = Bindable::Func {
-            ty: ty.clone(),
-            global_name: "".to_string(),
-        };
-        assert_eq!(b.get_type(), ty);
-    }
-
-    // #[test]
-    // fn test_next_type_var_and_fresh_var() {
-    //     let ctx = Context::new();
-    //     assert_eq!(*ctx.next_type_var(), 0);
-    //     let v1 = ctx.fresh_var();
-    //     assert_eq!(v1, 0);
-    //     let v2 = ctx.fresh_var();
-    //     assert_eq!(v2, 1);
-    //     assert_eq!(*ctx.next_type_var(), 2);
-    // }
-
-    #[test]
-    fn test_into_iter() {
-        let binding = Context::new();
-        let ctx = binding.add_binding(Binding {
-            name: "z".to_string(),
-            bindable: Bindable::Var {
-                ty: (dummy_type()),
-                local_var_index: 0,
-            },
-            span: None,
-        });
-        let mut iter = (&ctx).into_iter();
-        let b = iter.next().unwrap();
-        assert_eq!(b.name, "z");
-        assert!(iter.next().is_none());
+    fn test_alloc_local_var_increments() {
+        let ctx = Context::new();
+        let a = ctx.alloc_local_var();
+        let b = ctx.alloc_local_var();
+        assert_eq!(a + 1, b);
     }
 }
+

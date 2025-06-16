@@ -2,16 +2,17 @@ use crate::ast::typed::Expr as TExpr;
 use crate::ast::typed::Func as TFunc;
 use crate::ast::typed::Lit as TLit;
 use crate::ast::typed::Pattern as TPattern;
+use crate::ast::typed::QualifiedName;
 use crate::ast::typed::Type;
 use crate::ast::typed::Typed;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
 use crate::guarded_push;
-use crate::parser::context::Bindable;
 use crate::parser::context::Binding;
 use crate::parser::context::Constraint;
 use crate::parser::context::ConstraintKind;
 use crate::parser::context::Context;
+use crate::parser::context::Path;
 use crate::span::Span;
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -20,59 +21,26 @@ use std::vec;
 
 impl<'a> Context {
     pub fn new_with_builtins() -> Rc<Self> {
-        let ctx = Self::new();
-        let ctx = ctx.add_binding(Binding {
-            name: BinaryOp::Add.name().to_string(),
-            bindable: Bindable::Func {
+        fn new_infix_op(op: BinaryOp) -> Binding {
+            Binding {
+                name: op.name().to_string(),
+                path: Path::Func {
+                    qual_name: QualifiedName::new_from_vec(vec![typed::Name::String(op.name())]),
+                },
+                span: None,
                 ty: Type::Arrow {
                     lhs: Box::new(Type::Tuple {
                         elems: vec![Type::Int, Type::Int],
                     }),
                     rhs: Box::new(Type::Int),
                 },
-                global_name: BinaryOp::Add.name().to_string(),
-            },
-            span: None,
-        });
-        let ctx = ctx.add_binding(Binding {
-            name: BinaryOp::Sub.name().to_string(),
-            bindable: Bindable::Func {
-                ty: (Type::Arrow {
-                    lhs: Box::new(Type::Tuple {
-                        elems: vec![Type::Int, Type::Int],
-                    }),
-                    rhs: Box::new(Type::Int),
-                }),
-                global_name: BinaryOp::Sub.name().to_string(),
-            },
-            span: None,
-        });
-        let ctx = ctx.add_binding(Binding {
-            name: BinaryOp::Mul.name().to_string(),
-            bindable: Bindable::Func {
-                ty: (Type::Arrow {
-                    lhs: Box::new(Type::Tuple {
-                        elems: vec![Type::Int, Type::Int],
-                    }),
-                    rhs: Box::new(Type::Int),
-                }),
-                global_name: BinaryOp::Mul.name().to_string(),
-            },
-            span: None,
-        });
-        let ctx = ctx.add_binding(Binding {
-            name: BinaryOp::Div.name().to_string(),
-            bindable: Bindable::Func {
-                ty: (Type::Arrow {
-                    lhs: Box::new(Type::Tuple {
-                        elems: vec![Type::Int, Type::Int],
-                    }),
-                    rhs: Box::new(Type::Int),
-                }),
-                global_name: BinaryOp::Div.name().to_string(),
-            },
-            span: None,
-        });
+            }
+        }
+        let ctx = Self::new();
+        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Add));
+        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Sub));
+        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Mul));
+        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Div));
         ctx
     }
 
@@ -86,11 +54,11 @@ impl<'a> Context {
                 TPattern::Var { name, ty, span } => {
                     bindings.push(Binding {
                         name: name.clone(),
-                        bindable: Bindable::Var {
-                            ty: (ty.clone()),
-                            local_var_index: ctx.alloc_local_var(),
+                        path: Path::LocalVar {
+                            index: ctx.alloc_local_var(),
                         },
                         span: Some(*span),
+                        ty: (ty.clone()),
                     });
                 }
                 TPattern::Tuple { elems, .. } => {
@@ -194,13 +162,13 @@ impl Block {
                     // so it will not be tucked into a let body
                     Stmt::Func(ref func) => {
                         bindings.push(Binding {
-                            bindable: Bindable::Func {
-                                ty: (Type::Arrow {
-                                    lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
-                                    rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
-                                }),
-                                global_name: ctx.qualify_name(&func.name),
+                            path: Path::Func {
+                                qual_name: ctx.qualify(typed::Name::String(func.name.clone())),
                             },
+                            ty: (Type::Arrow {
+                                lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
+                                rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
+                            }),
                             name: func.name.clone(),
                             span: Some(func.span),
                         });
@@ -216,6 +184,7 @@ impl Block {
         }
         // first pass: add all function bindings to the context
         // so the user can do mutual recursions in these functions
+
         let (mut stmts, bindings) = collect_func_bindings(ctx.clone(), stmts)?;
         // check if names are unique
         let mut names = std::collections::HashSet::new();
@@ -270,17 +239,13 @@ impl Block {
                 Stmt::Func(func) => {
                     res_seq.push(TExpr::Func {
                         func: Box::new(TFunc {
-                            name: func.name.clone(),
+                            name: ctx.qualify(func.name.clone().into()),
                             param: func.param.to_typed(ctx.clone())?,
                             ret_ty: func.ret_ty.to_type(ctx.clone())?,
                             body: {
-                                guarded_push!(
-                                    ctx.state_refmut().local_var_count,
-                                    0,
-                                    {
-                                        func.body.to_typed_with_unsolved_constraints(ctx.clone())
-                                    }
-                                )?
+                                guarded_push!(ctx.state_refmut().local_var_count, 0, {
+                                    func.body.to_typed_with_unsolved_constraints(ctx.clone())
+                                })?
                             },
                             span: func.span,
                             func_ty: Type::Arrow {
@@ -291,12 +256,8 @@ impl Block {
                     });
                 }
                 Stmt::Block(block) => {
-                    guarded_push!(ctx.state_refmut().name_stack, block.name.clone(),
-                    {
-                        let x = block.to_typed(ctx.clone())?;
-                        Ok(res_seq.push(x))
-                    }
-                    )?
+                    let x = block.to_typed(ctx.clone())?;
+                    res_seq.push(x)
                 }
                 Stmt::Empty { .. } => {}
             }
@@ -311,18 +272,16 @@ impl Block {
     /// Converts the Block to a typed expression.
     pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
         // a block introduces a new nameless scope.
-        Self::stmts_to_typed(ctx.clone(), self.stmts.clone().into(), self.span)
+        guarded_push!(ctx.state_refmut().name_stack, self.name.clone(), {
+            Self::stmts_to_typed(ctx.clone(), self.stmts.clone().into(), self.span)
+        })
     }
 }
 
 impl Expr {
-    fn find_var_by_name<'a>(
-        name: &str,
-        ctx: &'a Context,
-        span: (usize, usize),
-    ) -> TypingResult<&'a Bindable> {
-        match ctx.find_self_by_name(name) {
-            Some(binding) => Ok(&binding.bindable),
+    fn lookup<'a>(name: &str, ctx: &'a Context, span: (usize, usize)) -> TypingResult<&'a Binding> {
+        match ctx.lookup(name) {
+            Some(binding) => Ok(binding),
             None => Err(TypingErr::UnboundVar { span }),
         }
     }
@@ -342,11 +301,12 @@ impl Expr {
                 span: *span,
             }),
             Expr::Var { name, span } => {
-                let ty = Self::find_var_by_name(name.as_str(), &ctx, *span)?.get_type();
+                let bind = Self::lookup(name.as_str(), &ctx, *span)?;
                 Ok(TExpr::Var {
-                    name: name.clone(),
+                    name: name.clone().into(),
                     span: *span,
-                    ty: ty,
+                    ty: bind.ty.clone(),
+                    path: bind.path.clone(),
                 })
             }
             Expr::UnaryOp {
@@ -399,7 +359,7 @@ impl Expr {
                     kind: ConstraintKind::App,
                 };
                 let cons = ctx.add_constraint(constr);
-                Ok(TExpr::Application {
+                Ok(TExpr::App {
                     callee: Box::new(func_typed),
                     arg: Box::new(arg_typed),
                     ty: *ret_ty,
