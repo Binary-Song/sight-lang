@@ -205,20 +205,20 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl display::WithPrec<crate::parser::exprs::Prec> for Expr {
-    /// Returns the precedence of the expression.
-    /// None means never put parentheses around it.
-    fn prec(&self) -> Option<Prec> {
-        match self {
-            Expr::Unit { .. } => None,
-            Expr::Int { .. } => None,
-            Expr::Bool { .. } => None,
-            Expr::Var { .. } => None,
-            Expr::UnaryOp {  .. } => todo!(),
-            Expr::BinaryOp { op, .. } => Some(op.prec()),
-            Expr::App { .. } => Some(Prec::App),
-            Expr::Tuple { .. } => Some(Prec::Tuple),
-            Expr::Block(_) => None,
-        }
-    }
-}
+// impl display::WithPrec<crate::parser::exprs::Prec> for Expr {
+//     /// Returns the precedence of the expression.
+//     /// None means never put parentheses around it.
+//     fn prec(&self) -> Option<Prec> {
+//         match self {
+//             Expr::Unit { .. } => None,
+//             Expr::Int { .. } => None,
+//             Expr::Bool { .. } => None,
+//             Expr::Var { .. } => None,
+//             Expr::UnaryOp {  .. } => todo!(),
+//             Expr::BinaryOp { op, .. } => Some(op.prec()),
+//             Expr::App { .. } => Some(Prec::App),
+//             Expr::Tuple { .. } => Some(Prec::Tuple),
+//             Expr::Block(_) => None,
+//         }
+//     }
+// }

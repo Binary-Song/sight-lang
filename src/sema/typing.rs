@@ -550,25 +550,25 @@ impl crate::ast::Expr {
     // }
 }
 
-impl Display for Substitution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "T{} -> {}", self.from, self.to)
-    }
-}
+// impl Display for Substitution {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "T{} -> {}", self.from, self.to)
+//     }
+// }
 
-impl Display for Substitutions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.subs.is_empty() {
-            write!(f, "[]")
-        } else {
-            write!(f, "[")?;
-            for (i, sub) in self.subs.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{}", sub)?;
-            }
-            write!(f, "]")
-        }
-    }
-}
+// impl Display for Substitutions {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         if self.subs.is_empty() {
+//             write!(f, "[]")
+//         } else {
+//             write!(f, "[")?;
+//             for (i, sub) in self.subs.iter().enumerate() {
+//                 if i > 0 {
+//                     write!(f, ", ")?;
+//                 }
+//                 write!(f, "{}", sub)?;
+//             }
+//             write!(f, "]")
+//         }
+//     }
+// }

@@ -125,12 +125,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl display::WithPrec<Prec> for Pattern {
-    fn prec(&self) -> Option<Prec> {
-        match self {
-            Pattern::Unit { .. } => None,
-            Pattern::Var { .. } => None,
-            Pattern::Tuple { .. } => Some(Prec::Tuple),
-        }
-    }
-}
+// impl display::WithPrec<Prec> for Pattern {
+//     fn prec(&self) -> Option<Prec> {
+//         match self {
+//             Pattern::Unit { .. } => None,
+//             Pattern::Var { .. } => None,
+//             Pattern::Tuple { .. } => Some(Prec::Tuple),
+//         }
+//     }
+// }

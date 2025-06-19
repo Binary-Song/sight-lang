@@ -111,14 +111,14 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl display::WithPrec<Prec> for TypeExpr {
-    fn prec(&self) -> Option<Prec> {
-        match self {
-            TypeExpr::Unit { .. } => None,
-            TypeExpr::Int { .. } => None,
-            TypeExpr::Bool { .. } => None,
-            TypeExpr::Arrow { .. } => Some(Prec::Arrow),
-            TypeExpr::Tuple { .. } => Some(Prec::Tuple),
-        }
-    }
-}
+// impl display::WithPrec<Prec> for TypeExpr {
+//     fn prec(&self) -> Option<Prec> {
+//         match self {
+//             TypeExpr::Unit { .. } => None,
+//             TypeExpr::Int { .. } => None,
+//             TypeExpr::Bool { .. } => None,
+//             TypeExpr::Arrow { .. } => Some(Prec::Arrow),
+//             TypeExpr::Tuple { .. } => Some(Prec::Tuple),
+//         }
+//     }
+// }
