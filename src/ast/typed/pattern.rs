@@ -26,16 +26,16 @@ pub enum PatternId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum PatternSum {
+pub enum Pattern {
     Variable(VariablePattern),
     Tuple(TuplePattern),
 }
 
 impl PatternId {
-    pub fn deref(self, arena: &Arena) -> PatternSum {
+    pub fn deref(self, arena: &Arena) -> Pattern {
         match self {
-            PatternId::Variable(id) => PatternSum::Variable(arena.deref(id).clone()),
-            PatternId::Tuple(id) => PatternSum::Tuple(arena.deref(id).clone()),
+            PatternId::Variable(id) => Pattern::Variable(arena.deref(id).clone()),
+            PatternId::Tuple(id) => Pattern::Tuple(arena.deref(id).clone()),
         }
     }
 }

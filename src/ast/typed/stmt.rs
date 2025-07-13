@@ -25,7 +25,7 @@ pub struct EmptyStmt {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]
-pub enum StmtIdSum {
+pub enum StmtId {
     Let(Id<LetStmt>),
     Function(Id<FunctionStmt>),
     Block(Id<Block>),
@@ -34,7 +34,7 @@ pub enum StmtIdSum {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum StmtSum {
+pub enum Stmt {
     Let(LetStmt),
     Function(FunctionStmt),
     Block(Block),
@@ -42,14 +42,15 @@ pub enum StmtSum {
     Empty(EmptyStmt),
 }
 
-impl StmtIdSum {
-    pub fn deref(self, arena: &Arena) -> StmtSum {
+impl StmtId {
+    pub fn deref<T: GetArena>(self, arena: &T) -> Stmt {
+        let arena = arena.get_arena();
         match self {
-            StmtIdSum::Let(id) => StmtSum::Let(arena.deref(id).clone()),
-            StmtIdSum::Function(id) => StmtSum::Function(arena.deref(id).clone()),
-            StmtIdSum::Block(id) => StmtSum::Block(arena.deref(id).clone()),
-            StmtIdSum::Expr(expr_id) => StmtSum::Expr(expr_id),
-            StmtIdSum::Empty(id) => StmtSum::Empty(arena.deref(id).clone()),
+            StmtId::Let(id) => Stmt::Let(arena.deref(id).clone()),
+            StmtId::Function(id) => Stmt::Function(arena.deref(id).clone()),
+            StmtId::Block(id) => Stmt::Block(arena.deref(id).clone()),
+            StmtId::Expr(expr_id) => Stmt::Expr(expr_id),
+            StmtId::Empty(id) => Stmt::Empty(arena.deref(id).clone()),
         }
     }
 }

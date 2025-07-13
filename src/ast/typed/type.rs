@@ -1,4 +1,7 @@
-use crate::ast::{id::*, typed::*};
+use crate::{
+    ast::{id::*, typed::*},
+    utils::interning::Interner,
+};
 use sight_macros::{Internable, LiteralValue, StaticInternable};
 use std::{collections::HashMap, hash::Hash};
 

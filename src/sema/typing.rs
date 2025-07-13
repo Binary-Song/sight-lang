@@ -1,24 +1,22 @@
 use super::inference::unify;
 use super::inference::Type as ConType;
 use super::inference::TypeIdMapper;
+use crate::ast::typed::ArenaItem;
+use crate::ast::typed::GetArena;
 use crate::ast as u;
 use crate::ast::id::Id;
-use crate::ast::typed::VariableType;
 use crate::ast::typed::{self as t, BindingData, FunctionType};
 use crate::ast::typed::{Arena, BindingId};
 use crate::sema::inference::{Constraint, Solution};
 use crate::utils::interning::{InternString, Interner, StaticInternable};
 use core::panic;
-use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::ops::{Add, AddAssign};
-use std::rc::Rc;
 
 /// Context for type checking.
 struct Context {
     next_type_var: usize,
     pub arena: Arena,
-    type_interner: Interner<t::Type>,
+    pub type_interner: Interner<t::Type>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +35,16 @@ pub enum TypeError {
 }
 
 pub type TypeRes<T> = Result<T, TypeError>;
+
+impl GetArena for Context {
+    fn get_arena(&self) -> &Arena {
+        &self.arena
+    }
+
+    fn get_arena_mut(&mut self) -> &mut Arena {
+        &mut self.arena
+    }
+}
 
 impl Context {
     pub fn new() -> Self {
@@ -63,7 +71,7 @@ impl Context {
 
     fn derive_binding(&mut self, binding_head: BindingId, data: BindingData) -> BindingId {
         let binding = binding_head.derive(data);
-        let binding_head = self.arena.bind_new_id_to(binding);
+        let binding_head = binding.new_id(self);
         binding_head
     }
 
@@ -276,7 +284,7 @@ impl Context {
         //     to type the function bodies.
         let mut let_head = binding_head;
         // second pass (beware if the global ctx is modified)
-        let mut typed_stmts: Vec<t::StmtIdSum> = vec![];
+        let mut typed_stmts: Vec<t::StmtId> = vec![];
         for (stmt, fn_data) in second_pass_data {
             let typed_stmt = match stmt {
                 u::Stmt::Let { lhs, rhs, span } => {
@@ -298,7 +306,7 @@ impl Context {
                         span: *span,
                         constraint: c,
                     });
-                    t::StmtIdSum::Let(id)
+                    t::StmtId::Let(id)
                 }
                 u::Stmt::Func(func) => {
                     // add param to ctx
@@ -318,25 +326,25 @@ impl Context {
                         body: data.body_id,
                         span: func.span,
                     };
-                    t::StmtIdSum::Function(self.arena.bind_new_id_to(fn_stmt))
+                    t::StmtId::Function(self.arena.bind_new_id_to(fn_stmt))
                 }
                 u::Stmt::Block(block) => {
                     let block_id = self.type_block(let_head, block)?;
-                    t::StmtIdSum::Block(block_id)
+                    t::StmtId::Block(block_id)
                 }
                 u::Stmt::Expr { expr, span: _ } => {
                     let expr_typed = self.type_expr(let_head, expr)?;
-                    t::StmtIdSum::Expr(expr_typed)
+                    t::StmtId::Expr(expr_typed)
                 }
                 u::Stmt::Empty { span } => {
-                    t::StmtIdSum::Empty(self.arena.bind_new_id_to(t::EmptyStmt { span: *span }))
+                    t::StmtId::Empty(self.arena.bind_new_id_to(t::EmptyStmt { span: *span }))
                 }
             };
             typed_stmts.push(typed_stmt);
         }
         let last_stmt = typed_stmts.last().unwrap();
         let ty = match last_stmt.deref(&self.arena) {
-            t::StmtSum::Expr(e) => {
+            t::Stmt::Expr(e) => {
                 e.deref(&self.arena).ty(&self.arena)
             },
             _ => self.type_to_id(t::Type::unit()),

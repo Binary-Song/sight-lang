@@ -45,7 +45,7 @@ pub struct TupleExpr {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
-    pub stmts: Vec<StmtIdSum>,
+    pub stmts: Vec<StmtId>,
     pub ty: TypeId,
     pub span: (usize, usize),
 }
@@ -69,9 +69,9 @@ pub enum ExprSum {
 }
 
 impl ExprIdSum {
-    pub fn deref(self, arena: &Arena) -> ExprSum {
+    pub fn deref(self, arena: &impl GetArena) -> ExprSum {
         match self {
-            ExprIdSum::Literal(id) => ExprSum::Literal(arena.deref(id).clone()),
+            ExprIdSum::Literal(id) => ExprSum::Literal(id.de(arena) ),
             ExprIdSum::Variable(id) => ExprSum::Variable(arena.deref(id).clone()),
             ExprIdSum::Application(id) => ExprSum::Application(arena.deref(id).clone()),
             ExprIdSum::Block(id) => ExprSum::Block(arena.deref(id).clone()),
@@ -81,14 +81,12 @@ impl ExprIdSum {
 }
 
 impl ExprSum {
-    pub fn ty(&self, arena: &Arena) -> TypeId {
+    pub fn ty(&self, arena: &impl GetArena) -> TypeId {
         match self {
             ExprSum::Literal(expr) => expr.ty,
             ExprSum::Variable(expr) => expr.ty,
             ExprSum::Application(expr) => expr.ty,
-            ExprSum::Block(expr) => {
-                expr.block.deref(&arena).unwrap().ty
-            },
+            ExprSum::Block(expr) => expr.block.de(arena).unwrap().ty,
             ExprSum::Tuple(expr) => expr.ty,
         }
     }

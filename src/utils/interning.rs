@@ -8,7 +8,12 @@ use std::marker::PhantomData;
 /// An internable type allows for interning.
 ///
 /// See [Interned] for more details.
-pub trait Internable: Eq + Hash + Sized + Clone {}
+pub trait Internable: Eq + Hash + Sized + Clone {
+    /// Encode the [Internable] value to get an id.
+    fn en(self, interner: &mut impl GetInterner<Self>) -> Interned<Self> {
+        interner.get_interner_mut().intern(self)
+    }
+}
 
 pub trait StaticInternable: Internable + 'static {
     fn interner() -> &'static std::thread::LocalKey<RefCell<Interner<Self>>>;
@@ -22,6 +27,11 @@ pub struct Interner<T: Internable> {
     indices: HashMap<T, usize>,
 }
 
+pub trait GetInterner<T: Internable> {
+    fn get_interner(&self) -> &Interner<T>;
+    fn get_interner_mut(&mut self) -> &mut Interner<T>;
+}
+
 pub type InternString = Interned<String>;
 
 /// An id to a thread-locally deduped (aka. interned) object of type `T`.
@@ -31,6 +41,13 @@ pub type InternString = Interned<String>;
 ///
 /// To get the original value back, use the [`unintern`] function.
 pub struct Interned<T: Internable>(usize, PhantomData<T>);
+
+impl<T: Internable> Interned<T> {
+    /// Decode the id to get the [Internable] value.
+    pub fn de(self, interner: &impl GetInterner<T>) -> T {
+        interner.get_interner().unintern(self)
+    }
+}
 
 impl<T: StaticInternable> Interned<T> {
     pub fn static_unintern(self) -> T {

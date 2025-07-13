@@ -29,12 +29,30 @@ pub struct Arena {
     pub idmap_constraint: IdMap<Constraint>,
 }
 
-pub trait HasIdMapInArena: Sized {
-    fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self>;
-    fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self>;
+pub trait GetArena {
+    fn get_arena(&self) -> &Arena;
+    fn get_arena_mut(&mut self) -> &mut Arena;
 }
 
-impl HasIdMapInArena for Constraint {
+impl GetArena for Arena {
+    fn get_arena(&self) -> &Arena {
+        self
+    }
+
+    fn get_arena_mut(&mut self) -> &mut Arena {
+        self
+    }
+}
+
+pub trait ArenaItem: Sized {
+    fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self>;
+    fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self>;
+    fn new_id(self, arena: &mut impl GetArena) -> Id<Self> {
+        arena.get_arena_mut().bind_new_id_to(self)
+    }
+}
+
+impl ArenaItem for Constraint {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_constraint
     }
@@ -43,7 +61,7 @@ impl HasIdMapInArena for Constraint {
     }
 }
 
-impl HasIdMapInArena for LiteralExpr {
+impl ArenaItem for LiteralExpr {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_literal_expr
     }
@@ -52,7 +70,7 @@ impl HasIdMapInArena for LiteralExpr {
     }
 }
 
-impl HasIdMapInArena for VariableExpr {
+impl ArenaItem for VariableExpr {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_variable_expr
     }
@@ -61,7 +79,7 @@ impl HasIdMapInArena for VariableExpr {
     }
 }
 
-impl HasIdMapInArena for ApplicationExpr {
+impl ArenaItem for ApplicationExpr {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_application_expr
     }
@@ -70,7 +88,7 @@ impl HasIdMapInArena for ApplicationExpr {
     }
 }
 
-impl HasIdMapInArena for Block {
+impl ArenaItem for Block {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_block
     }
@@ -79,7 +97,7 @@ impl HasIdMapInArena for Block {
     }
 }
 
-impl HasIdMapInArena for BlockExpr {
+impl ArenaItem for BlockExpr {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_block_expr
     }
@@ -88,7 +106,7 @@ impl HasIdMapInArena for BlockExpr {
     }
 }
 
-impl HasIdMapInArena for TupleExpr {
+impl ArenaItem for TupleExpr {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_tuple_expr
     }
@@ -97,7 +115,7 @@ impl HasIdMapInArena for TupleExpr {
     }
 }
 
-impl HasIdMapInArena for VariablePattern {
+impl ArenaItem for VariablePattern {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_variable_pattern
     }
@@ -106,7 +124,7 @@ impl HasIdMapInArena for VariablePattern {
     }
 }
 
-impl HasIdMapInArena for TuplePattern {
+impl ArenaItem for TuplePattern {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_tuple_pattern
     }
@@ -115,7 +133,7 @@ impl HasIdMapInArena for TuplePattern {
     }
 }
 
-impl HasIdMapInArena for LetStmt {
+impl ArenaItem for LetStmt {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_let_stmt
     }
@@ -124,7 +142,7 @@ impl HasIdMapInArena for LetStmt {
     }
 }
 
-impl HasIdMapInArena for FunctionStmt {
+impl ArenaItem for FunctionStmt {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_function_stmt
     }
@@ -133,7 +151,7 @@ impl HasIdMapInArena for FunctionStmt {
     }
 }
 
-impl HasIdMapInArena for EmptyStmt {
+impl ArenaItem for EmptyStmt {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
         &context.idmap_empty_stmt
     }
@@ -142,7 +160,7 @@ impl HasIdMapInArena for EmptyStmt {
     }
 }
 
-impl HasIdMapInArena for Binding {
+impl ArenaItem for Binding {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Binding> {
         &context.idmap_def
     }
@@ -156,15 +174,15 @@ impl Arena {
         Arena::default()
     }
 
-    pub fn bind_new_id_to<T: HasIdMapInArena>(&mut self, node: T) -> Id<T> {
+    pub fn bind_new_id_to<T: ArenaItem>(&mut self, node: T) -> Id<T> {
         T::get_mut_id_map(self).push(node)
     }
 
-    pub fn bind_id_to<T: HasIdMapInArena>(&mut self, id: Id<T>, value: T) {
+    pub fn bind_id_to<T: ArenaItem>(&mut self, id: Id<T>, value: T) {
         T::get_mut_id_map(self).set(id, value);
     }
 
-    pub fn unbound_id<T: HasIdMapInArena>(&mut self) -> Id<T> {
+    pub fn unbound_id<T: ArenaItem>(&mut self) -> Id<T> {
         T::get_mut_id_map(self).push_none()
     }
 
@@ -172,11 +190,11 @@ impl Arena {
         Body::get_mut_id_map(self).push_none()
     }
 
-    pub fn deref<T: HasIdMapInArena>(&self, id: Id<T>) -> &T {
+    pub fn deref<T: ArenaItem>(&self, id: Id<T>) -> &T {
         T::get_id_map(self).get(id).unwrap()
     }
 
-    pub fn deref_mut<T: HasIdMapInArena>(&mut self, id: Id<T>) -> &mut T {
+    pub fn deref_mut<T: ArenaItem>(&mut self, id: Id<T>) -> &mut T {
         T::get_mut_id_map(self).get_mut(id).unwrap()
     }
 
