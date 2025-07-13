@@ -1,4 +1,3 @@
-use crate::ast::typed::Name;
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::*;
@@ -15,7 +14,7 @@ enum ParseStmtResult {
     /// A `}` was immediately encountered and consumed. No Stmt parsed.
     BlockEnded,
     /// An trailing expr was parsed, then `}` was encountered and consumed.
-    BlockEndedWithExpr(Expr),
+    BlockEndedWithExpr(Expr),            
     /// A deep or shallow failure.
     Err(ParseErr),
 }
@@ -41,6 +40,7 @@ impl<'a> Parser<'a> {
     #[named]
     #[instrument(ret)]
     pub fn fn_stmt(&mut self) -> Result<Stmt, ParseErr> {
+        // fn <name>(<param_pattern>) -> <ret_type> { <body> }
         let rule = function_name!();
         let _fn = self.expect(TokenType::Fn, rule)?;
         let name = self.expect(TokenType::Ident, rule)?;
@@ -68,7 +68,7 @@ impl<'a> Parser<'a> {
             name: name,
             param: param_pattern,
             ret_ty: ret_type,
-            body: Expr::Block(Box::new(body)),
+            body: body,
             span: span,
         })))
     }
@@ -192,15 +192,6 @@ impl<'a> Parser<'a> {
         return Ok(Block {
             stmts,
             span,
-            name: match name {
-                Some(name) => Name::String(name),
-                None => {
-                    // !!! Important: if parsing failed, we do not bump the block count.
-                    let block_index = self.block_count.value();
-                    self.block_count.set(block_index + 1);
-                    Name::Index(block_index)
-                }
-            },
         });
     }
 }

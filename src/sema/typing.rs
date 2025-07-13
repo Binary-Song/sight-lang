@@ -1,574 +1,620 @@
-use crate::ast::typed::Expr as TExpr;
-use crate::ast::typed::Func as TFunc;
-use crate::ast::typed::Lit as TLit;
-use crate::ast::typed::Pattern as TPattern;
-use crate::ast::typed::QualifiedName;
-use crate::ast::typed::Type;
-use crate::ast::typed::Typed;
-use crate::ast::visitor::Visitor;
-use crate::ast::*;
-use crate::guarded_push;
-use crate::parser::context::Binding;
-use crate::parser::context::Constraint;
-use crate::parser::context::ConstraintKind;
-use crate::parser::context::Context;
-use crate::parser::context::Path;
-use crate::span::Span;
+use super::inference::unify;
+use super::inference::Type as ConType;
+use super::inference::TypeIdMapper;
+use crate::ast as u;
+use crate::ast::id::Id;
+use crate::ast::typed::VariableType;
+use crate::ast::typed::{self as t, BindingData, FunctionType};
+use crate::ast::typed::{Arena, BindingId};
+use crate::sema::inference::{Constraint, Solution};
+use crate::utils::interning::{InternString, Interner, StaticInternable};
+use core::panic;
+use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::fmt::Display;
+use std::ops::{Add, AddAssign};
 use std::rc::Rc;
-use std::vec;
 
-impl<'a> Context {
-    pub fn new_with_builtins() -> Rc<Self> {
-        fn new_infix_op(op: BinaryOp) -> Binding {
-            Binding {
-                name: op.name().to_string(),
-                path: Path::Func {
-                    qual_name: QualifiedName::new_from_vec(vec![typed::Name::String(op.name())]),
-                },
-                span: None,
-                ty: Type::Arrow {
-                    lhs: Box::new(Type::Tuple {
-                        elems: vec![Type::Int, Type::Int],
-                    }),
-                    rhs: Box::new(Type::Int),
-                },
-            }
-        }
-        let ctx = Self::new();
-        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Add));
-        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Sub));
-        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Mul));
-        let ctx = ctx.add_binding(new_infix_op(BinaryOp::Div));
-        ctx
-    }
-
-    fn add_bindings_in_patttern(self: Rc<Context>, pat: &TPattern) -> Rc<Context> {
-        fn collect_bindings_in_pattern(
-            ctx: Rc<Context>,
-            pat: &TPattern,
-            bindings: &mut Vec<Binding>,
-        ) {
-            match pat {
-                TPattern::Var { name, ty, span } => {
-                    bindings.push(Binding {
-                        name: name.clone(),
-                        path: Path::LocalVar {
-                            index: ctx.alloc_local_var(),
-                        },
-                        span: Some(*span),
-                        ty: (ty.clone()),
-                    });
-                }
-                TPattern::Tuple { elems, .. } => {
-                    for elem in elems {
-                        collect_bindings_in_pattern(ctx.clone(), elem, bindings);
-                    }
-                }
-            }
-        }
-        let mut bindings = Vec::new();
-        collect_bindings_in_pattern(self.clone(), pat, &mut bindings);
-        self.add_bindings(bindings)
-    }
+/// Context for type checking.
+struct Context {
+    next_type_var: usize,
+    pub arena: Arena,
+    type_interner: Interner<t::Type>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypingErr {
-    UnboundVar { span: (usize, usize) },
-    DuplicateBinding { binding: Binding },
-    CannotUnify { lhs: Type, rhs: Type },
+pub enum TypeError {
+    UnboundVar {
+        name: InternString,
+        span: (usize, usize),
+    },
+    DuplicateBinding {
+        binding: BindingId,
+    },
+    CannotUnify {
+        lhs: t::TypeId,
+        rhs: t::TypeId,
+    },
 }
 
-pub type TypingResult<T> = Result<T, TypingErr>;
+pub type TypeRes<T> = Result<T, TypeError>;
 
-impl TypeExpr {
-    pub fn to_type(&self, ctx: Rc<Context>) -> TypingResult<Type> {
-        match self {
-            TypeExpr::Unit { .. } => Ok(Type::unit()),
-            TypeExpr::Bool { .. } => Ok(Type::Bool),
-            TypeExpr::Int { .. } => Ok(Type::Int),
-            TypeExpr::Arrow { lhs, rhs, .. } => Ok(Type::Arrow {
-                lhs: Box::new(lhs.to_type(ctx.clone())?),
-                rhs: Box::new(rhs.to_type(ctx.clone())?),
-            }),
-            TypeExpr::Tuple { elems, .. } => {
-                let mut result_elems = vec![];
-                for elem in elems {
-                    result_elems.push(elem.to_type(ctx.clone())?);
-                }
-                Ok(Type::Tuple {
-                    elems: result_elems,
-                })
+impl Context {
+    pub fn new() -> Self {
+        Context {
+            next_type_var: 0,
+            arena: Arena::new(),
+            type_interner: Interner::new(),
+        }
+    }
+
+    fn type_to_id(&mut self, ty: t::Type) -> t::TypeId {
+        self.type_interner.intern(ty)
+    }
+
+    fn id_to_type(&self, t: t::TypeId) -> t::Type {
+        self.type_interner.unintern(t)
+    }
+
+    fn bump_fresh_type_var(&mut self) -> t::TypeId {
+        let index = self.next_type_var;
+        self.next_type_var += 1;
+        self.type_to_id(t::VariableType { index }.into())
+    }
+
+    fn derive_binding(&mut self, binding_head: BindingId, data: BindingData) -> BindingId {
+        let binding = binding_head.derive(data);
+        let binding_head = self.arena.bind_new_id_to(binding);
+        binding_head
+    }
+
+    fn get_binding_type(&mut self, binding: BindingId) -> Option<t::TypeId> {
+        match self.arena.deref(binding).data {
+            BindingData::Variable { ty, .. } => Some(ty),
+            BindingData::FunctionDecl {
+                param_type,
+                return_type,
+                ..
+            } => Some(
+                self.type_to_id(
+                    t::FunctionType {
+                        lhs: param_type,
+                        rhs: return_type,
+                    }
+                    .into(),
+                ),
+            ),
+            BindingData::Empty => None,
+        }
+    }
+
+    fn get_pattern_type(&mut self, pattern: t::PatternId) -> t::TypeId {
+        match pattern {
+            t::PatternId::Variable(variable_pattern_id) => {
+                let variable_pattern = self.arena.deref(variable_pattern_id);
+                variable_pattern.ty
+            }
+            t::PatternId::Tuple(tuple_pattern_id) => {
+                let tuple_pattern = self.arena.deref(tuple_pattern_id);
+                tuple_pattern.ty
             }
         }
     }
-}
 
-impl Pattern {
-    fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TPattern> {
-        match self {
-            Pattern::Unit { span } => Ok(TPattern::unit(*span)),
-            Pattern::Var {
-                name,
-                ty: type_anno,
-                span,
-            } => Ok(TPattern::Var {
-                name: name.clone(),
-                ty: if let Some(type_anno) = type_anno {
-                    type_anno.to_type(ctx)?
-                } else {
-                    Type::TypeVar {
-                        index: ctx.alloc_type_var(),
-                    }
-                },
-                span: *span,
-            }),
-            Pattern::Tuple { elems, span } => {
-                let mut result_elems = vec![];
-                for elem in elems {
-                    result_elems.push(elem.to_typed(ctx.clone())?);
+    fn get_expr_type(&mut self, expr: t::ExprIdSum) -> t::TypeId {
+        match expr {
+            t::ExprIdSum::Literal(literal_expr_id) => {
+                let literal_expr = self.arena.deref(literal_expr_id);
+                literal_expr.ty
+            }
+            t::ExprIdSum::Application(app_expr_id) => {
+                let app_expr = self.arena.deref(app_expr_id);
+                app_expr.ty
+            }
+            t::ExprIdSum::Tuple(tuple_expr_id) => {
+                let tuple_expr = self.arena.deref(tuple_expr_id);
+                tuple_expr.ty
+            }
+            t::ExprIdSum::Variable(id) => {
+                let variable_expr = self.arena.deref(id);
+                variable_expr.ty
+            }
+            t::ExprIdSum::Block(id) => {
+                let block_expr = self.arena.deref(id);
+                self.arena.deref(block_expr.block).ty
+            }
+        }
+    }
+
+    pub fn type_of_type_expr(&mut self, type_expr: &u::TypeExpr) -> t::TypeId {
+        let ty = match type_expr {
+            u::TypeExpr::Unit { span: _ } => t::TupleType { elems: vec![] }.into(),
+            u::TypeExpr::Int { span: _ } => t::PrimitiveType::Int.into(),
+            u::TypeExpr::Bool { span: _ } => t::PrimitiveType::Bool.into(),
+            u::TypeExpr::Arrow { lhs, rhs, span: _ } => {
+                let lhs = self.type_of_type_expr(lhs);
+                let rhs = self.type_of_type_expr(rhs);
+                t::FunctionType { lhs, rhs }.into()
+            }
+            u::TypeExpr::Tuple { elems, span: _ } => {
+                let mut elem_types = vec![];
+                let mut ty;
+                for e in elems {
+                    ty = self.type_of_type_expr(e);
+                    elem_types.push(ty);
                 }
-                Ok(TPattern::Tuple {
-                    ty: Type::Tuple {
-                        elems: result_elems.iter().map(|e| e.ty()).collect::<Vec<_>>(),
-                    },
+                t::TupleType { elems: elem_types }.into()
+            }
+        };
+        self.type_to_id(ty)
+    }
+
+    /// Maps the pattern to a typed one.
+    /// Also gives you a binding head derived from the `binding_head` parameter, which includes
+    /// the names introduced by this pattern.
+    pub fn type_pattern(
+        &mut self,
+        mut binding_head: BindingId,
+        pattern: &u::Pattern,
+    ) -> (t::PatternId, BindingId) {
+        match pattern {
+            u::Pattern::Var {
+                name: name,
+                ty,
+                span: span,
+            } => {
+                let name = InternString::from_str(&name.as_str());
+                let ty = match ty {
+                    None => self.bump_fresh_type_var(),
+                    Some(ty) => self.type_of_type_expr(ty),
+                };
+                let binding = self.derive_binding(binding_head, BindingData::Variable { name, ty });
+                let variable_pattern = t::VariablePattern {
+                    binding_id: binding,
+                    ty,
                     span: *span,
-                    elems: result_elems,
-                })
+                };
+                let variable_pattern_id = self.arena.bind_new_id_to(variable_pattern);
+                (t::PatternId::Variable(variable_pattern_id), binding)
+            }
+            u::Pattern::Tuple { elems, span } => {
+                let mut patts = vec![];
+                for elem in elems {
+                    let (patt, new_head) = self.type_pattern(binding_head, elem);
+                    binding_head = new_head;
+                    patts.push(patt);
+                }
+                let tup_patt = t::TuplePattern {
+                    elems: patts,
+                    ty: self.type_to_id(t::TupleType { elems: vec![] }.into()),
+                    span: *span,
+                };
+                (
+                    t::PatternId::Tuple(self.arena.bind_new_id_to(tup_patt)),
+                    binding_head,
+                )
+            }
+            u::Pattern::Unit { span } => {
+                let tup = u::Pattern::Tuple {
+                    elems: vec![],
+                    span: *span,
+                };
+                self.type_pattern(binding_head, &tup)
             }
         }
     }
-}
 
-impl Block {
-    fn stmts_to_typed(
-        ctx: Rc<Context>,
-        stmts: VecDeque<Stmt>,
-        mut span: (usize, usize),
-    ) -> TypingResult<TExpr> {
-        fn collect_func_bindings(
-            ctx: Rc<Context>,
-            stmts: VecDeque<Stmt>,
-        ) -> TypingResult<(VecDeque<Stmt>, Vec<Binding>)> {
-            let mut out_fn_stmts = VecDeque::new();
-            let mut out_other_stmts = VecDeque::new();
-            let mut bindings = vec![];
-            for stmt in stmts {
-                match stmt {
-                    // if func, then we add the typing info to the bindings
-                    // and insert the func to the front of the output_stmts
-                    // so it will not be tucked into a let body
-                    Stmt::Func(ref func) => {
-                        bindings.push(Binding {
-                            path: Path::Func {
-                                qual_name: ctx.qualify(typed::Name::String(func.name.clone())),
-                            },
-                            ty: (Type::Arrow {
-                                lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
-                                rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
-                            }),
-                            name: func.name.clone(),
-                            span: Some(func.span),
-                        });
-                        out_fn_stmts.push_back(stmt);
-                    }
-                    s => {
-                        out_other_stmts.push_back(s);
-                    }
-                }
-            }
-            out_fn_stmts.extend(out_other_stmts);
-            Ok((out_fn_stmts, bindings))
+    /// Maps the block to a typed one.           
+    pub fn type_block(
+        &mut self,
+        mut binding_head: BindingId,
+        block: &u::Block,
+    ) -> TypeRes<Id<t::Block>> {
+        // When iterating over the statements, 2 passes are made:
+        // 1. Functions are "forward declared" by adding the binding into the context.
+        //    A body ID is created for the function, but the body is not yet defined.
+        // 2. The statements are processed, and the functions are defined with their bodies.
+        let mut second_pass_data = vec![];
+        struct FnData {
+            fn_binding_id: BindingId,
+            param_binding_begin: BindingId,
+            param_binding_last: BindingId,
+            name: InternString,
+            typed_param: t::PatternId,
+            return_type: t::TypeId,
+            body_id: t::BodyId,
         }
-        // first pass: add all function bindings to the context
-        // so the user can do mutual recursions in these functions
-
-        let (mut stmts, bindings) = collect_func_bindings(ctx.clone(), stmts)?;
-        // check if names are unique
-        let mut names = std::collections::HashSet::new();
-        for binding in &bindings {
-            if !names.insert(binding.name.clone()) {
-                return Err(TypingErr::DuplicateBinding {
-                    binding: binding.clone(),
-                });
-            }
-        }
-        let ctx = ctx.add_bindings(bindings);
-        // second pass: convert all statements to typed expressions
-        // if we see a let stmt, we will tuck the rest of the sequence into the body of the let
-        let mut res_seq: Vec<TExpr> = Vec::new();
-        let mut block_count = 0;
-        while !stmts.is_empty() {
-            let first_stmt = stmts.remove(0).unwrap();
-            span = (first_stmt.span().1, span.1);
-            match first_stmt {
-                Stmt::Let {
-                    lhs,
-                    rhs,
-                    span: let_span,
-                } => {
-                    let lhs = lhs.to_typed(ctx.clone())?;
-                    let ctx_with_lhs = ctx.clone().add_bindings_in_patttern(&lhs);
-                    // rhs cannot use the new bindings in lhs
-                    let rhs = rhs.to_typed_with_unsolved_constraints(ctx.clone())?;
-                    // letbody can use the new bindings
-                    let body = Self::stmts_to_typed(ctx_with_lhs, stmts, span)?;
-                    let span = (let_span.0, body.span().1);
-                    let lhs_ty = lhs.ty();
-                    let rhs_ty = rhs.ty();
-                    let cons = ctx.add_constraint(Constraint {
-                        lhs: lhs_ty,
-                        rhs: rhs_ty,
-                        kind: ConstraintKind::Let,
+        // first pass
+        for stmt in &block.stmts {
+            let data = match stmt {
+                u::Stmt::Func(func) => {
+                    // forward declare (make sure ctx is mutated!)
+                    let name = InternString::from_str(&func.name.as_str());
+                    // create an empty binding head,
+                    // let the [type_pattern] function dump the names into it.
+                    let param_binding_begin = self.arena.bind_new_id_to(t::Binding {
+                        parent: None,
+                        data: BindingData::Empty,
                     });
-                    let let_expr = TExpr::Let {
-                        lhs,
-                        rhs: Box::new(rhs),
-                        body: Box::new(body),
-                        cons,
-                        span,
-                    };
-                    res_seq.push(let_expr);
-                    break;
-                }
-                Stmt::Expr { expr, .. } => {
-                    res_seq.push(expr.to_typed_with_unsolved_constraints(ctx.clone())?)
-                }
-                Stmt::Func(func) => {
-                    res_seq.push(TExpr::Func {
-                        func: Box::new(TFunc {
-                            name: ctx.qualify(func.name.clone().into()),
-                            param: func.param.to_typed(ctx.clone())?,
-                            ret_ty: func.ret_ty.to_type(ctx.clone())?,
-                            body: {
-                                guarded_push!(ctx.state_refmut().local_var_count, 0, {
-                                    func.body.to_typed_with_unsolved_constraints(ctx.clone())
-                                })?
-                            },
-                            span: func.span,
-                            func_ty: Type::Arrow {
-                                lhs: Box::new(func.param.to_typed(ctx.clone())?.ty()),
-                                rhs: Box::new(func.ret_ty.to_type(ctx.clone())?),
-                            },
+                    let (typed_param, param_binding_last) =
+                        self.type_pattern(param_binding_begin, &func.param);
+                    let param_type = self.get_pattern_type(typed_param);
+                    let return_type = self.type_of_type_expr(&func.ret_ty);
+                    let body_id = self.arena.unbound_body_id();
+                    binding_head = self.derive_binding(
+                        binding_head,
+                        BindingData::FunctionDecl {
+                            name: name,
+                            param_type: param_type,
+                            return_type: return_type,
+                            body_id,
+                        },
+                    );
+                    let fn_binding_id = binding_head;
+                    (
+                        stmt,
+                        Some(FnData {
+                            fn_binding_id,
+                            param_binding_begin,
+                            param_binding_last,
+                            name,
+                            typed_param,
+                            return_type,
+                            body_id,
                         }),
+                    )
+                }
+                _ => (stmt, None),
+            };
+            second_pass_data.push(data);
+        }
+        // Now binding_head contains all functions in this block.
+        // We now branch off the binding_head into let_head and binding_head.
+        // 1. let_head: this contains block functions and will
+        //     include the let bindings when we add them in the second pass.
+        //     This is used to type the statements in the block.
+        // 2. binding_head: this contains block functions only and is used
+        //     to type the function bodies.
+        let mut let_head = binding_head;
+        // second pass (beware if the global ctx is modified)
+        let mut typed_stmts: Vec<t::StmtIdSum> = vec![];
+        for (stmt, fn_data) in second_pass_data {
+            let typed_stmt = match stmt {
+                u::Stmt::Let { lhs, rhs, span } => {
+                    let lhs_typed;
+                    // rhs cannot use names from lhs
+                    let rhs_typed = self.type_expr(let_head, rhs)?;
+                    // adds the bindings to the context
+                    (lhs_typed, let_head) = self.type_pattern(let_head, lhs);
+                    // create constraint
+                    let clhs = self.get_pattern_type(lhs_typed);
+                    let crhs = self.get_expr_type(rhs_typed);
+                    let c = self.arena.bind_new_id_to(Constraint {
+                        lhs: clhs,
+                        rhs: crhs,
                     });
+                    let id = self.arena.bind_new_id_to(t::LetStmt {
+                        lhs: lhs_typed,
+                        rhs: rhs_typed,
+                        span: *span,
+                        constraint: c,
+                    });
+                    t::StmtIdSum::Let(id)
                 }
-                Stmt::Block(block) => {
-                    let x = block.to_typed(ctx.clone())?;
-                    res_seq.push(x)
+                u::Stmt::Func(func) => {
+                    // add param to ctx
+                    let data = fn_data.unwrap();
+                    // param_binding_begin used to have a None parent
+                    // now make it point to the binding_head to make
+                    // block functions available in the body (which allows
+                    // recursions)
+                    self.arena.deref_mut(data.param_binding_begin).parent = Some(binding_head);
+                    let body = self.type_block(data.param_binding_last, &func.body)?;
+                    let body = self.arena.deref(body).clone();
+                    self.arena.bind_id_to(data.body_id, body);
+                    let fn_stmt = t::FunctionStmt {
+                        new_fn_id: data.fn_binding_id,
+                        param: data.typed_param,
+                        ret_ty: data.return_type,
+                        body: data.body_id,
+                        span: func.span,
+                    };
+                    t::StmtIdSum::Function(self.arena.bind_new_id_to(fn_stmt))
                 }
-                Stmt::Empty { .. } => {}
-            }
+                u::Stmt::Block(block) => {
+                    let block_id = self.type_block(let_head, block)?;
+                    t::StmtIdSum::Block(block_id)
+                }
+                u::Stmt::Expr { expr, span: _ } => {
+                    let expr_typed = self.type_expr(let_head, expr)?;
+                    t::StmtIdSum::Expr(expr_typed)
+                }
+                u::Stmt::Empty { span } => {
+                    t::StmtIdSum::Empty(self.arena.bind_new_id_to(t::EmptyStmt { span: *span }))
+                }
+            };
+            typed_stmts.push(typed_stmt);
         }
-        return Ok(TExpr::Seq {
-            ty: res_seq.last().map_or(Type::unit(), |e| e.ty()),
-            seq: res_seq,
-            span: span,
-        });
+        let last_stmt = typed_stmts.last().unwrap();
+        let ty = match last_stmt.deref(&self.arena) {
+            t::StmtSum::Expr(e) => {
+                e.deref(&self.arena).ty(&self.arena)
+            },
+            _ => self.type_to_id(t::Type::unit()),
+        };
+        Ok(self.arena.bind_new_id_to(t::Block {
+            stmts: typed_stmts,
+            span: block.span,
+            ty: ty
+        }))
     }
 
-    /// Converts the Block to a typed expression.
-    pub fn to_typed(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
-        // a block introduces a new nameless scope.
-        guarded_push!(ctx.state_refmut().name_stack, self.name.clone(), {
-            Self::stmts_to_typed(ctx.clone(), self.stmts.clone().into(), self.span)
-        })
-    }
-}
-
-impl Expr {
-    fn lookup<'a>(name: &str, ctx: &'a Context, span: (usize, usize)) -> TypingResult<&'a Binding> {
-        match ctx.lookup(name) {
-            Some(binding) => Ok(binding),
-            None => Err(TypingErr::UnboundVar { span }),
-        }
-    }
-
-    /// Converts the expression to a typed expression with unsolved constraints.
-    /// The constraints will be stored in the context, and can be solved later
-    /// using `unify_constraints`.
-    pub fn to_typed_with_unsolved_constraints(&self, ctx: Rc<Context>) -> TypingResult<TExpr> {
-        match self {
-            Expr::Unit { span } => Ok(TExpr::unit(span.clone())),
-            Expr::Int { value, span } => Ok(TExpr::Lit {
-                value: TLit::Int(*value),
-                span: *span,
-            }),
-            Expr::Bool { value, span } => Ok(TExpr::Lit {
-                value: TLit::Bool(*value),
-                span: *span,
-            }),
-            Expr::Var { name, span } => {
-                let bind = Self::lookup(name.as_str(), &ctx, *span)?;
-                Ok(TExpr::Var {
-                    name: name.clone().into(),
+    /// Type THE expression, not type expression.
+    /// Does not do the HM inference
+    pub fn type_expr(&mut self, binding_head: BindingId, expr: &u::Expr) -> TypeRes<t::ExprIdSum> {
+        match expr {
+            u::Expr::Unit { span } => {
+                let e = t::TupleExpr {
+                    elems: vec![],
                     span: *span,
-                    ty: bind.ty.clone(),
-                    path: bind.path.clone(),
+                    ty: self.type_to_id(t::TupleType { elems: vec![] }.into()),
+                };
+                let id = self.arena.bind_new_id_to(e);
+                Ok(t::ExprIdSum::Tuple(id))
+            }
+            u::Expr::Int { value, span } => {
+                let e = t::LiteralExpr {
+                    value: t::Literal::Int(*value),
+                    span: *span,
+                    ty: self.type_to_id(t::PrimitiveType::Int.into()),
+                };
+                let id = self.arena.bind_new_id_to(e);
+                Ok(t::ExprIdSum::Literal(id))
+            }
+            u::Expr::Bool { value, span } => {
+                let e = t::LiteralExpr {
+                    value: t::Literal::Bool(*value),
+                    span: *span,
+                    ty: self.type_to_id(t::PrimitiveType::Int.into()),
+                };
+                let id = self.arena.bind_new_id_to(e);
+                Ok(t::ExprIdSum::Literal(id))
+            }
+            u::Expr::Var { name, span } => {
+                let name = name.clone().intern();
+                if let Some(binding) = self.arena.lookup_name(name, binding_head) {
+                    if let Some(ty) = self.get_binding_type(binding) {
+                        let v = t::VariableExpr {
+                            target: binding,
+                            name: name,
+                            ty,
+                            span: *span,
+                        };
+                        return Ok(t::ExprIdSum::Variable(self.arena.bind_new_id_to(v)));
+                    }
+                }
+                Err(TypeError::UnboundVar {
+                    name: name,
+                    span: (*span).into(),
                 })
             }
-            Expr::UnaryOp {
+            u::Expr::UnaryOp {
                 op,
                 arg,
                 span,
                 op_span,
-            } => Ok(Expr::App {
-                func: Box::new(Expr::Var {
-                    name: op.name(),
-                    span: op_span.clone(),
-                }),
-                arg: arg.clone(),
-                span: span.clone(),
-            }
-            .to_typed_with_unsolved_constraints(ctx.clone())?),
-            Expr::BinaryOp {
+            } => self.type_expr(
+                binding_head,
+                &u::Expr::App {
+                    func: Box::new(u::Expr::Var {
+                        name: op.name(),
+                        span: *op_span,
+                    }),
+                    arg: arg.clone(),
+                    span: *span,
+                },
+            ),
+            u::Expr::BinaryOp {
                 op,
-                lhs: arg1,
-                rhs: arg2,
+                lhs,
+                rhs,
                 span,
                 op_span,
-            } => Ok(Expr::App {
-                func: Box::new(Expr::Var {
-                    name: op.name(),
-                    span: op_span.clone(),
-                }),
-                arg: Box::new(Expr::Tuple {
-                    elems: vec![*arg1.clone(), *arg2.clone()],
-                    span: (arg1.span().0, arg2.span().1),
-                }),
-                span: *span,
-            }
-            .to_typed_with_unsolved_constraints(ctx.clone())?),
-            Expr::Block(block) => block.to_typed(ctx.clone()),
-            Expr::App { func, arg, span } => {
-                let func_typed = func.to_typed_with_unsolved_constraints(ctx.clone())?;
-                let arg_typed = arg.to_typed_with_unsolved_constraints(ctx.clone())?;
-                let func_ty = func_typed.ty();
-                let arg_ty = arg_typed.ty();
-                let ret_ty = Box::new(Type::TypeVar {
-                    index: ctx.alloc_type_var(),
-                });
-                let constr = Constraint {
-                    lhs: func_ty.clone(),
-                    rhs: Type::Arrow {
-                        lhs: Box::new(arg_ty),
-                        rhs: ret_ty.clone(),
-                    },
-                    kind: ConstraintKind::App,
-                };
-                let cons = ctx.add_constraint(constr);
-                Ok(TExpr::App {
-                    callee: Box::new(func_typed),
-                    arg: Box::new(arg_typed),
-                    ty: *ret_ty,
+            } => self.type_expr(
+                binding_head,
+                &u::Expr::App {
+                    func: Box::new(u::Expr::Var {
+                        name: op.name(),
+                        span: *op_span,
+                    }),
+                    arg: Box::new(u::Expr::Tuple {
+                        elems: vec![*lhs.clone(), *rhs.clone()],
+                        span: *span,
+                    }),
                     span: *span,
-                    cons,
-                })
+                },
+            ),
+            u::Expr::App { func, arg, span } => {
+                let func_typed = self.type_expr(binding_head, func)?;
+                let arg_typed = self.type_expr(binding_head, arg)?;
+                let rhs_type = self.bump_fresh_type_var();
+                let func_should_be_ty = t::FunctionType {
+                    lhs: self.get_expr_type(arg_typed),
+                    rhs: rhs_type,
+                };
+                let c = Constraint {
+                    lhs: self.get_expr_type(func_typed),
+                    rhs: self.type_to_id(func_should_be_ty.into()),
+                };
+                let cid = self.arena.bind_new_id_to(c);
+                let e = t::ApplicationExpr {
+                    callee: func_typed,
+                    arg: arg_typed,
+                    ty: rhs_type,
+                    constraint: cid,
+                    span: *span,
+                };
+                let id = self.arena.bind_new_id_to(e);
+                Ok(t::ExprIdSum::Application(id))
             }
-            Expr::Tuple { elems, span } => {
-                let mut typed_elems = vec![];
+            u::Expr::Tuple { elems, span } => {
+                let mut typed_elems = Vec::new();
+                let mut elem_types = Vec::new();
                 for elem in elems {
-                    typed_elems.push(elem.to_typed_with_unsolved_constraints(ctx.clone())?);
+                    let elem_typed = self.type_expr(binding_head, elem)?;
+                    typed_elems.push(elem_typed);
+                    elem_types.push(self.get_expr_type(elem_typed));
                 }
-                Ok(TExpr::Tuple {
-                    span: *span,
-                    ty: Type::Tuple {
-                        elems: typed_elems.iter().map(|e| e.ty()).collect(),
-                    },
+                let e = t::TupleExpr {
                     elems: typed_elems,
-                })
-            }
-        }
-    }
-
-    /// Converts the expression to a typed expression with solved constraints.
-    pub fn to_typed(&self) -> TypingResult<TExpr> {
-        let ctx = Context::new_with_builtins();
-        let mut expr = self.to_typed_with_unsolved_constraints(ctx.clone())?;
-        let state = ctx.state();
-        let cons = &mut state.borrow_mut().constraints;
-        let subs = unify_constraints(cons)?;
-        subs.apply_to_ast(&mut expr);
-        Ok(expr)
-    }
-}
-
-#[derive(Debug)]
-pub struct Substitution {
-    pub from: u32,
-    pub to: Type,
-}
-
-#[derive(Debug)]
-pub struct Substitutions {
-    pub subs: Vec<Substitution>,
-}
-
-impl Substitution {
-    pub fn apply_to_type_var(&self, ty: &mut Type) {
-        match ty {
-            Type::TypeVar { index } if *index == self.from => {
-                *ty = self.to.clone();
-            }
-            _ => (),
-        }
-    }
-
-    pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
-        let _ = ast.accept(self);
-    }
-}
-
-impl Visitor<()> for Substitution {
-    fn visit_ttype(&self, ty: &mut Type) -> Result<(), ()> {
-        self.apply_to_type_var(ty);
-        Ok(())
-    }
-}
-
-impl Substitutions {
-    pub fn new() -> Self {
-        Self { subs: Vec::new() }
-    }
-
-    pub fn add(&mut self, subs: Substitution) {
-        self.subs.push(subs);
-    }
-
-    pub fn apply_to_type(&self, ty: &mut Type) {
-        for sub in &self.subs {
-            sub.apply_to_ast(ty);
-        }
-    }
-
-    pub fn apply_to_ast<T: AST>(&self, ast: &mut T) {
-        let _ = ast.accept(self);
-    }
-
-    pub fn pop(&mut self) -> Option<Substitution> {
-        self.subs.pop()
-    }
-}
-
-impl Visitor<()> for Substitutions {
-    fn visit_ttype(&self, ty: &mut typed::Type) -> Result<(), ()> {
-        self.apply_to_type(ty);
-        Ok(())
-    }
-}
-
-pub fn unify_constraints(
-    constraints: &mut VecDeque<Constraint>,
-) -> Result<Substitutions, TypingErr> {
-    fn occurs(var_index: u32, ty: &Type) -> bool {
-        match ty {
-            Type::TypeVar { index } if *index == var_index => true,
-            Type::Arrow { lhs, rhs } => occurs(var_index, lhs) || occurs(var_index, rhs),
-            Type::Tuple { elems } => elems.iter().any(|e| occurs(var_index, e)),
-            _ => false,
-        }
-    }
-
-    let mut subs = Substitutions::new();
-    while let Some(constraint) = constraints.pop_front() {
-        match (constraint.lhs, constraint.rhs) {
-            (Type::TypeVar { index: var_index }, other)
-            | (other, Type::TypeVar { index: var_index })
-                if !occurs(var_index, &other) =>
-            {
-                // If the variable does not occur in the other type, we can substitute it
-                let sub = Substitution {
-                    from: var_index,
-                    to: other.clone(),
+                    span: *span,
+                    ty: self.type_to_id(t::TupleType { elems: elem_types }.into()),
                 };
-                // Apply the substitution to all remaining constraints
-                for c in constraints.iter_mut() {
-                    sub.apply_to_ast(&mut c.lhs);
-                    sub.apply_to_ast(&mut c.rhs);
-                }
-                subs.add(sub);
+                let id = self.arena.bind_new_id_to(e);
+                Ok(t::ExprIdSum::Tuple(id))
             }
-            (
-                Type::Arrow {
-                    lhs: lhs1,
-                    rhs: rhs1,
-                },
-                Type::Arrow {
-                    lhs: lhs2,
-                    rhs: rhs2,
-                },
-            ) => {
-                // Unify the left-hand sides and right-hand sides of the arrows
-                constraints.push_back(Constraint {
-                    lhs: *lhs1,
-                    rhs: *lhs2,
-                    kind: ConstraintKind::Unify,
-                });
-                constraints.push_back(Constraint {
-                    lhs: *rhs1,
-                    rhs: *rhs2,
-                    kind: ConstraintKind::Unify,
-                });
-            }
-            (
-                ref lhs @ Type::Tuple { elems: ref elems1 },
-                ref rhs @ Type::Tuple { elems: ref elems2 },
-            ) => {
-                // Unify the elements of the tuples
-                if elems1.len() != elems2.len() {
-                    return Err(TypingErr::CannotUnify {
-                        lhs: lhs.clone(),
-                        rhs: rhs.clone(),
-                    });
-                }
-                for (e1, e2) in elems1.iter().zip(elems2.iter()) {
-                    constraints.push_back(Constraint {
-                        lhs: e1.clone(),
-                        rhs: e2.clone(),
-                        kind: ConstraintKind::Unify,
-                    });
-                }
-            }
-            (lhs, rhs) if lhs == rhs => {
-                // If the types are equal, we can ignore this constraint
-                continue;
-            }
-            (lhs, rhs) => {
-                // If we reach here, we have an unresolvable constraint
-                return Err(TypingErr::CannotUnify { lhs, rhs });
+            u::Expr::Block(block) => {
+                let block_id = self.type_block(binding_head, block)?;
+                let block_expr = t::BlockExpr { block: block_id };
+                let id = self.arena.bind_new_id_to(block_expr);
+                Ok(t::ExprIdSum::Block(id))
             }
         }
     }
-    Ok(subs)
+
+    pub fn solve_constraints(&mut self) -> TypeRes<Solution> {
+        let mut constraints: VecDeque<Constraint> = VecDeque::new();
+        for (_, c) in self.arena.idmap_constraint.iter() {
+            constraints.push_back(c.clone());
+        }
+        unify(&mut constraints, self)
+    }
+
+    pub fn to_solved_type(&self, ty: t::TypeId, sln: &Solution) -> t::Type {
+        let ty = self.id_to_type(ty);
+        match ty {
+            t::Type::Variable(t::VariableType { index: var }) => match sln.slns.get(&var) {
+                Some(tid) => self.id_to_type(*tid),
+                None => panic!("Type variable {} not found in solution", var),
+            },
+            a => a,
+        }
+    }
 }
 
-impl crate::ast::Expr {
-    // pub fn to_typed(&self) -> crate::ast::typed::Expr
-    // {
-    // }
+enum Tag {
+    PrimitiveInt,
+    PrimitiveBool,
+    Function,
+    Tuple,
 }
 
-// impl Display for Substitution {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "T{} -> {}", self.from, self.to)
-//     }
-// }
+impl Into<usize> for Tag {
+    fn into(self) -> usize {
+        match self {
+            Tag::PrimitiveInt => 0,
+            Tag::PrimitiveBool => 1,
+            Tag::Function => 2,
+            Tag::Tuple => 3,
+        }
+    }
+}
 
-// impl Display for Substitutions {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         if self.subs.is_empty() {
-//             write!(f, "[]")
-//         } else {
-//             write!(f, "[")?;
-//             for (i, sub) in self.subs.iter().enumerate() {
-//                 if i > 0 {
-//                     write!(f, ", ")?;
-//                 }
-//                 write!(f, "{}", sub)?;
-//             }
-//             write!(f, "]")
-//         }
-//     }
-// }
+impl TryFrom<usize> for Tag {
+    type Error = ();
+    fn try_from(value: usize) -> Result<Self, ()> {
+        match value {
+            0 => Ok(Tag::PrimitiveInt),
+            1 => Ok(Tag::PrimitiveBool),
+            2 => Ok(Tag::Function),
+            3 => Ok(Tag::Tuple),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TypeIdMapper for Context {
+    fn id_to_ctype(&self, id: t::TypeId) -> ConType {
+        let ty = self.id_to_type(id);
+        match ty {
+            t::Type::Primitive(primitive_type) => {
+                let leaf_kind = match primitive_type {
+                    t::PrimitiveType::Int => Tag::PrimitiveInt,
+                    t::PrimitiveType::Bool => Tag::PrimitiveBool,
+                };
+                let tag = leaf_kind.into();
+                ConType::Leaf { tag: tag }
+            }
+            t::Type::Function(FunctionType { lhs, rhs }) => ConType::NonLeaf {
+                tag: Tag::Function.into(),
+                children: vec![lhs, rhs],
+            },
+            t::Type::Tuple(tuple_type) => {
+                let elems = tuple_type.elems.into_iter().map(|e| e).collect();
+                ConType::NonLeaf {
+                    tag: Tag::Tuple.into(),
+                    children: elems,
+                }
+            }
+            t::Type::Variable(t::VariableType { index }) => ConType::TypeVar(index),
+        }
+    }
+
+    fn ctype_to_id(&mut self, ty: ConType) -> Result<t::TypeId, ()> {
+        match ty {
+            ConType::Leaf { tag } => {
+                let tag_kind = Tag::try_from(tag)?;
+                match tag_kind {
+                    Tag::PrimitiveInt => Ok(self.type_to_id(t::PrimitiveType::Int.into())),
+                    Tag::PrimitiveBool => Ok(self.type_to_id(t::PrimitiveType::Bool.into())),
+                    _ => Err(()),
+                }
+            }
+            ConType::NonLeaf { tag, children } => {
+                let tag_kind = Tag::try_from(tag)?;
+                match tag_kind {
+                    Tag::Function => {
+                        if children.len() != 2 {
+                            return Err(());
+                        }
+                        let lhs = children[0];
+                        let rhs = children[1];
+                        Ok(self.type_to_id(t::FunctionType { lhs, rhs }.into()))
+                    }
+                    Tag::Tuple => Ok(self.type_to_id(t::TupleType { elems: children }.into())),
+                    _ => Err(()),
+                }
+            }
+            ConType::TypeVar(index) => Ok(self.type_to_id(t::VariableType { index }.into())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ast::typed::ExprIdSum;
+    use crate::diag::print_error;
+    use crate::{ast::typed::Binding, parser, sema::typing::Context};
+    #[test]
+    fn simple_test() {
+        let code = "{ let x = 42; fn foo(x: int) -> int { x }; foo(x) }";
+        let e = parser::Parser::new(code).expr().unwrap();
+        let mut c = Context::new();
+        let h = c.arena.bind_new_id_to(Binding {
+            parent: None,
+            data: crate::ast::typed::BindingData::Empty,
+        });
+        let te = c
+            .type_expr(h, &e)
+            .map_err(|e| print_error(e, code, &mut c.type_interner));
+        println!("Typed expr: {:?}", te);
+        let te = te.unwrap();
+        let ty = te.deref(&c.arena).ty(&c.arena);
+        let sln = c
+            .solve_constraints()
+            .map_err(|e| print_error(e, code, &mut c.type_interner));
+        println!("Sln: {:?}", sln);
+        let sln = sln.unwrap();
+        let actual_ty = c.to_solved_type(ty, &sln);
+        println!("Type: {:?}", actual_ty);
+    }
+}

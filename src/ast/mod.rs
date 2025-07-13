@@ -1,10 +1,10 @@
 pub mod display;
-/// The typed ast. Differs from the untyped ast in that it has type info on
-/// the nodes and is desugared a little bit.
-pub mod typed;
-pub mod visitor;
 
-use crate::{ast::{typed::Name, visitor::Visitor}, parser::exprs::Prec};
+pub mod visitor; 
+pub mod id;
+pub mod typed;
+
+use crate::{ast::{ }, parser::exprs::Prec};
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 
@@ -122,7 +122,6 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
-    pub name: Name,
     pub span: (usize, usize),
 }
 
@@ -166,10 +165,10 @@ pub enum Pattern {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Func {
-    pub name: String,
+    pub name: String, // todo: change this to intern string
     pub param: Pattern,
     pub ret_ty: TypeExpr,
-    pub body: Expr,
+    pub body: Block,
     pub span: (usize, usize),
 }
 
@@ -195,6 +194,6 @@ pub enum TypeExpr {
     },
 }
 
-pub trait AST {
-    fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E>;
-}
+// pub trait AST {
+//     fn accept<E, V: Visitor<E>>(&mut self, visitor: &V) -> Result<(), E>;
+// }

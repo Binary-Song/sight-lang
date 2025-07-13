@@ -10,7 +10,6 @@ mod name_stack;
 pub mod patterns;
 pub mod stmts;
 pub mod type_exprs;
-pub use name_stack::NameStack;
 
 #[cfg(test)]
 mod testing;

@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn;
+ 
 #[proc_macro_derive(LiteralValue)]
 pub fn derive_literal_value(input: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
@@ -154,6 +155,32 @@ pub fn derive_num_conv(input: TokenStream) -> TokenStream {
     };
     gen.into()
 }
-// 这样你就可以在其他 crate 里这样用：
-// #[derive(MyDerive)]
-// struct MyStruct {}
+
+#[proc_macro_derive(StaticInternable)]
+pub fn derive_static_internable(input: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let name = &ast.ident;
+    let gen = quote! {
+        impl crate::utils::interning::Internable for #name {}
+        impl crate::utils::interning::StaticInternable for #name {
+            fn interner() -> &'static std::thread::LocalKey<std::cell::RefCell<crate::utils::interning::Interner<#name>>> {
+                use crate::utils::interning::Interner;
+                std::thread_local! {
+                    static INTERNER: std::cell::RefCell<Interner<#name>> = std::cell::RefCell::new(Interner::<#name>::new());
+                }
+                &INTERNER
+            }
+        }
+    };
+    gen.into()
+}
+
+#[proc_macro_derive(Internable)]
+pub fn derive_internable(input: TokenStream) -> TokenStream  {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let name = &ast.ident;
+    let gen = quote! {
+        impl crate::utils::interning::Internable for #name {}
+    };
+    gen.into()
+}

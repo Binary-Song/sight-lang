@@ -1,5 +1,5 @@
 use crate::{
-    ast::{typed, Expr, Pattern, Stmt, TypeExpr},
+    ast::{  Expr, Pattern, Stmt, TypeExpr},
     lexer::Token,
 };
 
@@ -35,19 +35,6 @@ impl Span for TypeExpr {
     }
 }
 
-impl Span for typed::Expr {
-    fn span(self: &Self) -> (usize, usize) {
-        match self {
-            typed::Expr::Lit { span, .. }
-            | typed::Expr::Var { span, .. }
-            | typed::Expr::Let { span, .. }
-            | typed::Expr::Seq { span, .. }
-            | typed::Expr::Tuple { span, .. }
-            | typed::Expr::App { span, .. } => *span,
-            typed::Expr::Func { func, .. } => func.span,
-        }
-    }
-}
 
 impl Span for Token {
     fn span(&self) -> (usize, usize) {
