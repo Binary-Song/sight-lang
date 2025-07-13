@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 pub trait TypeIdMapper {
     fn id_to_ctype(&self, id: TypeId) -> Type;
-    fn ctype_to_id(&mut self, ty: Type) -> Result<TypeId, ()>;
+    fn ctype_to_id(&mut self, ty: Type) -> TypeId;
 }
 
 /// An 'abstracted' type that only cares about the things that
@@ -92,7 +92,7 @@ pub fn unify(
                 if let Some(ty_id) = sln.get(*var) {
                     ty_id
                 } else {
-                    mapper.ctype_to_id(ty).unwrap()
+                    mapper.ctype_to_id(ty)
                 }
             }
             _ => ty_id,
@@ -129,7 +129,7 @@ pub fn unify(
                                 .map(|child| {
                                     let t = mapper.id_to_ctype(child);
                                     let t = map_type(mapper, t, var, dst.clone());
-                                    mapper.ctype_to_id(t).unwrap()
+                                    mapper.ctype_to_id(t)
                                 })
                                 .collect::<Vec<_>>();
                             Type::NonLeaf {
@@ -143,12 +143,12 @@ pub fn unify(
                 // Update existing solutions: replace var with other
                 for (_, tid) in solution.slns.iter_mut() {
                     let new_t = map_type(mapper, mapper.id_to_ctype(*tid), var, other.clone());
-                    *tid = mapper.ctype_to_id(new_t).unwrap();
+                    *tid = mapper.ctype_to_id(new_t);
                 }
 
                 solution
                     .slns
-                    .insert(var, mapper.ctype_to_id(other).unwrap());
+                    .insert(var, mapper.ctype_to_id(other));
             }
             (Type::Leaf { tag: lhs_tag }, Type::Leaf { tag: rhs_tag }) if lhs_tag == rhs_tag => {}
             (
@@ -169,8 +169,8 @@ pub fn unify(
                 }
             }
             (lhs, rhs) => {
-                let lhs = mapper.ctype_to_id(lhs).unwrap();
-                let rhs = mapper.ctype_to_id(rhs).unwrap();
+                let lhs = mapper.ctype_to_id(lhs);
+                let rhs = mapper.ctype_to_id(rhs);
                 return Err(TypeError::CannotUnify { lhs, rhs });
             }
         }

@@ -1,4 +1,4 @@
-use crate::ast::typed::*;
+use crate::{ast::typed::*, sema::inference::Constraint, utils::interning::InternString};
 use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -72,10 +72,10 @@ impl ExprIdSum {
     pub fn deref(self, arena: &impl GetArena) -> ExprSum {
         match self {
             ExprIdSum::Literal(id) => ExprSum::Literal(id.de(arena) ),
-            ExprIdSum::Variable(id) => ExprSum::Variable(arena.deref(id).clone()),
-            ExprIdSum::Application(id) => ExprSum::Application(arena.deref(id).clone()),
-            ExprIdSum::Block(id) => ExprSum::Block(arena.deref(id).clone()),
-            ExprIdSum::Tuple(id) => ExprSum::Tuple(arena.deref(id).clone()),
+            ExprIdSum::Variable(id) => ExprSum::Variable(id.de(arena)),
+            ExprIdSum::Application(id) => ExprSum::Application(id.de(arena)),
+            ExprIdSum::Block(id) => ExprSum::Block(id.de(arena)),
+            ExprIdSum::Tuple(id) => ExprSum::Tuple(id.de(arena)),
         }
     }
 }
@@ -86,7 +86,7 @@ impl ExprSum {
             ExprSum::Literal(expr) => expr.ty,
             ExprSum::Variable(expr) => expr.ty,
             ExprSum::Application(expr) => expr.ty,
-            ExprSum::Block(expr) => expr.block.de(arena).unwrap().ty,
+            ExprSum::Block(expr) => expr.block.de(arena).ty,
             ExprSum::Tuple(expr) => expr.ty,
         }
     }

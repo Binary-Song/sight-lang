@@ -4,7 +4,7 @@ pub mod visitor;
 pub mod id;
 pub mod typed;
 
-use crate::{ast::{ }, parser::exprs::Prec};
+use crate::{ parser::exprs::Prec};
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 

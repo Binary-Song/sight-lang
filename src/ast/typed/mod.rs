@@ -12,12 +12,7 @@ pub use pattern::*;
 pub use r#type::*;
 pub use stmt::*;
 
-use crate::{
-    ast::id::{Id, IdMap},
-    sema::inference::Constraint,
-    utils::interning::{InternString, Interned, StaticInternable},
-    LiteralValue,
-};
+use crate::ast::id::Id;
 /// A pointer to binding. When it is referred to as the "binding head",
 /// this means it is supposed to be the head of a linked list/tree
 /// (like in git) .

@@ -1,9 +1,6 @@
-use crate::{
-    ast::{id::*, typed::*},
-    utils::interning::Interner,
-};
-use sight_macros::{Internable, LiteralValue, StaticInternable};
-use std::{collections::HashMap, hash::Hash};
+use crate::utils::interning::Interned;
+use sight_macros::{Internable, LiteralValue};
+use std::hash::Hash;
 
 pub type TypeId = Interned<Type>;
 
@@ -28,8 +25,8 @@ pub enum PrimitiveType {
     Int,
 }
 
-impl Into<Type> for PrimitiveType {
-    fn into(self) -> Type {
+impl PrimitiveType {
+    pub fn to_type(self) -> Type {
         Type::Primitive(self)
     }
 }
@@ -40,8 +37,8 @@ pub struct FunctionType {
     pub rhs: TypeId,
 }
 
-impl Into<Type> for FunctionType {
-    fn into(self) -> Type {
+impl FunctionType {
+    pub fn to_type(self) -> Type {
         Type::Function(self)
     }
 }
@@ -51,8 +48,8 @@ pub struct TupleType {
     pub elems: Vec<TypeId>,
 }
 
-impl Into<Type> for TupleType {
-    fn into(self) -> Type {
+impl TupleType {
+    pub fn to_type(self) -> Type {
         Type::Tuple(self)
     }
 }
@@ -62,8 +59,8 @@ pub struct VariableType {
     pub index: usize,
 }
 
-impl Into<Type> for VariableType {
-    fn into(self) -> Type {
+impl VariableType {
+    pub fn to_type(self) -> Type {
         Type::Variable(self)
     }
 }

@@ -1,6 +1,4 @@
-use crate::ast::{id::*, typed::*};
-use sight_macros::{Internable, LiteralValue, StaticInternable};
-use std::{collections::HashMap, hash::Hash};
+use crate::{ast::{id::*, typed::*}, sema::inference::Constraint, utils::interning::InternString};
 
 /// Where id maps are stored. With Arena, you can get the value pointed to by an [Id].
 #[derive(Default)]
@@ -44,7 +42,7 @@ impl GetArena for Arena {
     }
 }
 
-pub trait ArenaItem: Sized {
+pub trait ArenaItem: Clone {
     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self>;
     fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self>;
     fn new_id(self, arena: &mut impl GetArena) -> Id<Self> {
@@ -190,10 +188,6 @@ impl Arena {
         Body::get_mut_id_map(self).push_none()
     }
 
-    pub fn deref<T: ArenaItem>(&self, id: Id<T>) -> &T {
-        T::get_id_map(self).get(id).unwrap()
-    }
-
     pub fn deref_mut<T: ArenaItem>(&mut self, id: Id<T>) -> &mut T {
         T::get_mut_id_map(self).get_mut(id).unwrap()
     }
@@ -201,12 +195,12 @@ impl Arena {
     pub fn lookup_name(&self, name: InternString, search_start: BindingId) -> Option<BindingId> {
         let mut def_id = search_start;
         loop {
-            if let Some(def_name) = self.deref(def_id).name() {
+            if let Some(def_name) = def_id.de(self).name() {
                 if name == def_name {
                     return Some(def_id);
                 }
             }
-            def_id = self.deref(def_id).parent?;
+            def_id = def_id.de(self).parent?;
         }
     }
 }

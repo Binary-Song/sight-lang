@@ -1,13 +1,15 @@
 use super::inference::unify;
 use super::inference::Type as ConType;
 use super::inference::TypeIdMapper;
-use crate::ast::typed::ArenaItem;
-use crate::ast::typed::GetArena;
 use crate::ast as u;
 use crate::ast::id::Id;
+use crate::ast::typed::ArenaItem;
+use crate::ast::typed::GetArena;
 use crate::ast::typed::{self as t, BindingData, FunctionType};
 use crate::ast::typed::{Arena, BindingId};
 use crate::sema::inference::{Constraint, Solution};
+use crate::utils::interning::GetInterner;
+use crate::utils::interning::Internable;
 use crate::utils::interning::{InternString, Interner, StaticInternable};
 use core::panic;
 use std::collections::VecDeque;
@@ -46,6 +48,16 @@ impl GetArena for Context {
     }
 }
 
+impl GetInterner<t::Type> for Context {
+    fn get_interner(&self) -> &Interner<t::Type> {
+        &self.type_interner
+    }
+
+    fn get_interner_mut(&mut self) -> &mut Interner<t::Type> {
+        &mut self.type_interner
+    }
+}
+
 impl Context {
     pub fn new() -> Self {
         Context {
@@ -55,18 +67,10 @@ impl Context {
         }
     }
 
-    fn type_to_id(&mut self, ty: t::Type) -> t::TypeId {
-        self.type_interner.intern(ty)
-    }
-
-    fn id_to_type(&self, t: t::TypeId) -> t::Type {
-        self.type_interner.unintern(t)
-    }
-
     fn bump_fresh_type_var(&mut self) -> t::TypeId {
         let index = self.next_type_var;
         self.next_type_var += 1;
-        self.type_to_id(t::VariableType { index }.into())
+        t::VariableType { index }.to_type().en(self)
     }
 
     fn derive_binding(&mut self, binding_head: BindingId, data: BindingData) -> BindingId {
@@ -76,20 +80,19 @@ impl Context {
     }
 
     fn get_binding_type(&mut self, binding: BindingId) -> Option<t::TypeId> {
-        match self.arena.deref(binding).data {
+        match binding.de(self).data {
             BindingData::Variable { ty, .. } => Some(ty),
             BindingData::FunctionDecl {
                 param_type,
                 return_type,
                 ..
             } => Some(
-                self.type_to_id(
-                    t::FunctionType {
-                        lhs: param_type,
-                        rhs: return_type,
-                    }
-                    .into(),
-                ),
+                t::FunctionType {
+                    lhs: param_type,
+                    rhs: return_type,
+                }
+                .to_type()
+                .en(self),
             ),
             BindingData::Empty => None,
         }
@@ -98,11 +101,11 @@ impl Context {
     fn get_pattern_type(&mut self, pattern: t::PatternId) -> t::TypeId {
         match pattern {
             t::PatternId::Variable(variable_pattern_id) => {
-                let variable_pattern = self.arena.deref(variable_pattern_id);
+                let variable_pattern = variable_pattern_id.de(self);
                 variable_pattern.ty
             }
             t::PatternId::Tuple(tuple_pattern_id) => {
-                let tuple_pattern = self.arena.deref(tuple_pattern_id);
+                let tuple_pattern = tuple_pattern_id.de(self);
                 tuple_pattern.ty
             }
         }
@@ -111,37 +114,37 @@ impl Context {
     fn get_expr_type(&mut self, expr: t::ExprIdSum) -> t::TypeId {
         match expr {
             t::ExprIdSum::Literal(literal_expr_id) => {
-                let literal_expr = self.arena.deref(literal_expr_id);
+                let literal_expr = literal_expr_id.de(self);
                 literal_expr.ty
             }
             t::ExprIdSum::Application(app_expr_id) => {
-                let app_expr = self.arena.deref(app_expr_id);
+                let app_expr = app_expr_id.de(self);
                 app_expr.ty
             }
             t::ExprIdSum::Tuple(tuple_expr_id) => {
-                let tuple_expr = self.arena.deref(tuple_expr_id);
+                let tuple_expr = tuple_expr_id.de(self);
                 tuple_expr.ty
             }
             t::ExprIdSum::Variable(id) => {
-                let variable_expr = self.arena.deref(id);
+                let variable_expr = id.de(self);
                 variable_expr.ty
             }
             t::ExprIdSum::Block(id) => {
-                let block_expr = self.arena.deref(id);
-                self.arena.deref(block_expr.block).ty
+                let block_expr = id.de(self);
+                block_expr.block.de(self).ty
             }
         }
     }
 
     pub fn type_of_type_expr(&mut self, type_expr: &u::TypeExpr) -> t::TypeId {
         let ty = match type_expr {
-            u::TypeExpr::Unit { span: _ } => t::TupleType { elems: vec![] }.into(),
-            u::TypeExpr::Int { span: _ } => t::PrimitiveType::Int.into(),
-            u::TypeExpr::Bool { span: _ } => t::PrimitiveType::Bool.into(),
+            u::TypeExpr::Unit { span: _ } => t::TupleType { elems: vec![] }.to_type(),
+            u::TypeExpr::Int { span: _ } => t::PrimitiveType::Int.to_type(),
+            u::TypeExpr::Bool { span: _ } => t::PrimitiveType::Bool.to_type(),
             u::TypeExpr::Arrow { lhs, rhs, span: _ } => {
                 let lhs = self.type_of_type_expr(lhs);
                 let rhs = self.type_of_type_expr(rhs);
-                t::FunctionType { lhs, rhs }.into()
+                t::FunctionType { lhs, rhs }.to_type()
             }
             u::TypeExpr::Tuple { elems, span: _ } => {
                 let mut elem_types = vec![];
@@ -150,10 +153,10 @@ impl Context {
                     ty = self.type_of_type_expr(e);
                     elem_types.push(ty);
                 }
-                t::TupleType { elems: elem_types }.into()
+                t::TupleType { elems: elem_types }.to_type()
             }
         };
-        self.type_to_id(ty)
+        ty.en(self)
     }
 
     /// Maps the pattern to a typed one.
@@ -193,7 +196,7 @@ impl Context {
                 }
                 let tup_patt = t::TuplePattern {
                     elems: patts,
-                    ty: self.type_to_id(t::TupleType { elems: vec![] }.into()),
+                    ty: t::TupleType { elems: vec![] }.to_type().en(self),
                     span: *span,
                 };
                 (
@@ -317,7 +320,7 @@ impl Context {
                     // recursions)
                     self.arena.deref_mut(data.param_binding_begin).parent = Some(binding_head);
                     let body = self.type_block(data.param_binding_last, &func.body)?;
-                    let body = self.arena.deref(body).clone();
+                    let body = body.de(self).clone();
                     self.arena.bind_id_to(data.body_id, body);
                     let fn_stmt = t::FunctionStmt {
                         new_fn_id: data.fn_binding_id,
@@ -344,15 +347,13 @@ impl Context {
         }
         let last_stmt = typed_stmts.last().unwrap();
         let ty = match last_stmt.deref(&self.arena) {
-            t::Stmt::Expr(e) => {
-                e.deref(&self.arena).ty(&self.arena)
-            },
-            _ => self.type_to_id(t::Type::unit()),
+            t::Stmt::Expr(e) => e.deref(&self.arena).ty(&self.arena),
+            _ => t::Type::unit().en(self),
         };
         Ok(self.arena.bind_new_id_to(t::Block {
             stmts: typed_stmts,
             span: block.span,
-            ty: ty
+            ty: ty,
         }))
     }
 
@@ -364,7 +365,7 @@ impl Context {
                 let e = t::TupleExpr {
                     elems: vec![],
                     span: *span,
-                    ty: self.type_to_id(t::TupleType { elems: vec![] }.into()),
+                    ty: t::TupleType { elems: vec![] }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
                 Ok(t::ExprIdSum::Tuple(id))
@@ -373,7 +374,7 @@ impl Context {
                 let e = t::LiteralExpr {
                     value: t::Literal::Int(*value),
                     span: *span,
-                    ty: self.type_to_id(t::PrimitiveType::Int.into()),
+                    ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
                 Ok(t::ExprIdSum::Literal(id))
@@ -382,7 +383,7 @@ impl Context {
                 let e = t::LiteralExpr {
                     value: t::Literal::Bool(*value),
                     span: *span,
-                    ty: self.type_to_id(t::PrimitiveType::Int.into()),
+                    ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
                 Ok(t::ExprIdSum::Literal(id))
@@ -451,7 +452,7 @@ impl Context {
                 };
                 let c = Constraint {
                     lhs: self.get_expr_type(func_typed),
-                    rhs: self.type_to_id(func_should_be_ty.into()),
+                    rhs: func_should_be_ty.to_type().en(self),
                 };
                 let cid = self.arena.bind_new_id_to(c);
                 let e = t::ApplicationExpr {
@@ -475,7 +476,7 @@ impl Context {
                 let e = t::TupleExpr {
                     elems: typed_elems,
                     span: *span,
-                    ty: self.type_to_id(t::TupleType { elems: elem_types }.into()),
+                    ty: t::TupleType { elems: elem_types }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
                 Ok(t::ExprIdSum::Tuple(id))
@@ -498,10 +499,10 @@ impl Context {
     }
 
     pub fn to_solved_type(&self, ty: t::TypeId, sln: &Solution) -> t::Type {
-        let ty = self.id_to_type(ty);
+        let ty = ty.de(self);
         match ty {
             t::Type::Variable(t::VariableType { index: var }) => match sln.slns.get(&var) {
-                Some(tid) => self.id_to_type(*tid),
+                Some(tid) => tid.de(self),
                 None => panic!("Type variable {} not found in solution", var),
             },
             a => a,
@@ -509,6 +510,7 @@ impl Context {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, )]
 enum Tag {
     PrimitiveInt,
     PrimitiveBool,
@@ -542,7 +544,7 @@ impl TryFrom<usize> for Tag {
 
 impl TypeIdMapper for Context {
     fn id_to_ctype(&self, id: t::TypeId) -> ConType {
-        let ty = self.id_to_type(id);
+        let ty = id.de(self);
         match ty {
             t::Type::Primitive(primitive_type) => {
                 let leaf_kind = match primitive_type {
@@ -567,32 +569,32 @@ impl TypeIdMapper for Context {
         }
     }
 
-    fn ctype_to_id(&mut self, ty: ConType) -> Result<t::TypeId, ()> {
+    fn ctype_to_id(&mut self, ty: ConType) -> t::TypeId {
         match ty {
             ConType::Leaf { tag } => {
-                let tag_kind = Tag::try_from(tag)?;
+                let tag_kind = Tag::try_from(tag).unwrap();
                 match tag_kind {
-                    Tag::PrimitiveInt => Ok(self.type_to_id(t::PrimitiveType::Int.into())),
-                    Tag::PrimitiveBool => Ok(self.type_to_id(t::PrimitiveType::Bool.into())),
-                    _ => Err(()),
+                    Tag::PrimitiveInt => t::PrimitiveType::Int.to_type().en(self),
+                    Tag::PrimitiveBool => t::PrimitiveType::Bool.to_type().en(self),
+                    _ => panic!("Tag kind should be leaf, got {:?}", tag_kind),
                 }
             }
             ConType::NonLeaf { tag, children } => {
-                let tag_kind = Tag::try_from(tag)?;
+                let tag_kind = Tag::try_from(tag).unwrap();
                 match tag_kind {
                     Tag::Function => {
                         if children.len() != 2 {
-                            return Err(());
+                            panic!("Function must have 2 children types, got {}.", children.len());
                         }
                         let lhs = children[0];
                         let rhs = children[1];
-                        Ok(self.type_to_id(t::FunctionType { lhs, rhs }.into()))
+                        t::FunctionType { lhs, rhs }.to_type().en(self)
                     }
-                    Tag::Tuple => Ok(self.type_to_id(t::TupleType { elems: children }.into())),
-                    _ => Err(()),
+                    Tag::Tuple => t::TupleType { elems: children }.to_type().en(self),
+                    _ => panic!("Tag kind should be non-leaf, got {:?}", tag_kind),
                 }
             }
-            ConType::TypeVar(index) => Ok(self.type_to_id(t::VariableType { index }.into())),
+            ConType::TypeVar(index) => t::VariableType { index }.to_type().en(self),
         }
     }
 }

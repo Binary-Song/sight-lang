@@ -1,6 +1,5 @@
-use crate::ast::typed::*;
-use sight_macros::{Internable, LiteralValue, StaticInternable};
-use std::{collections::HashMap, hash::Hash};
+use crate::{ast::typed::*, sema::inference::Constraint};
+use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct LetStmt {
@@ -46,11 +45,11 @@ impl StmtId {
     pub fn deref<T: GetArena>(self, arena: &T) -> Stmt {
         let arena = arena.get_arena();
         match self {
-            StmtId::Let(id) => Stmt::Let(arena.deref(id).clone()),
-            StmtId::Function(id) => Stmt::Function(arena.deref(id).clone()),
-            StmtId::Block(id) => Stmt::Block(arena.deref(id).clone()),
+            StmtId::Let(id) => Stmt::Let(id.de(arena)),
+            StmtId::Function(id) => Stmt::Function(id.de(arena)),
+            StmtId::Block(id) => Stmt::Block(id.de(arena)),
             StmtId::Expr(expr_id) => Stmt::Expr(expr_id),
-            StmtId::Empty(id) => Stmt::Empty(arena.deref(id).clone()),
+            StmtId::Empty(id) => Stmt::Empty(id.de(arena)),
         }
     }
 }

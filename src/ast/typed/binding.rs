@@ -3,11 +3,13 @@ use crate::{ast::typed::*, utils::interning::InternString};
 /// A singly linked tree, where you get pointers to parents
 /// but not children (like a git history graph)
 /// This makes it easy to append defs to any existing def.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Binding {
     pub parent: Option<BindingId>,
     pub data: BindingData,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BindingData {
     Empty,
     FunctionDecl {

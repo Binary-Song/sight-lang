@@ -1,6 +1,5 @@
-use crate::ast::typed::{Arena, ArenaItem, GetArena};
+use crate::ast::typed::{ArenaItem, GetArena};
 use crate::LiteralValue;
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -86,10 +85,10 @@ impl<T: ArenaItem> IdMap<T> {
         self.make_id(self.map.len() - 1)
     }
 
-    pub fn get(&self, id: Id<T>) -> Option<&T> {
+    pub fn get(&self, id: Id<T>) -> Option<T> {
         match self.map.get(self.unpack_id(id)) {
             None => None,
-            Some(Some(value)) => Some(value),
+            Some(Some(value)) => Some(value.clone()),
             Some(None) => None,
         }
     }

@@ -1,6 +1,5 @@
 use crate::ast::typed::*;
-use sight_macros::{Internable, LiteralValue, StaticInternable};
-use std::{collections::HashMap, hash::Hash};
+use sight_macros::LiteralValue;
 
 //
 // PATTERN
@@ -34,8 +33,8 @@ pub enum Pattern {
 impl PatternId {
     pub fn deref(self, arena: &Arena) -> Pattern {
         match self {
-            PatternId::Variable(id) => Pattern::Variable(arena.deref(id).clone()),
-            PatternId::Tuple(id) => Pattern::Tuple(arena.deref(id).clone()),
+            PatternId::Variable(id) => Pattern::Variable(id.de(arena)),
+            PatternId::Tuple(id) => Pattern::Tuple(id.de(arena)),
         }
     }
 }
