@@ -1,10 +1,9 @@
 pub mod display;
-
-pub mod visitor; 
 pub mod id;
 pub mod typed;
 
-use crate::{ parser::exprs::Prec};
+
+use crate::parser::exprs::Prec;
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 

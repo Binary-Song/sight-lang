@@ -13,13 +13,7 @@ use crate::utils::interning::Internable;
 use crate::utils::interning::{InternString, Interner, StaticInternable};
 use core::panic;
 use std::collections::VecDeque;
-
-/// Context for type checking.
-struct Context {
-    next_type_var: usize,
-    pub arena: Arena,
-    pub type_interner: Interner<t::Type>,
-}
+use crate::context::Context;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeError {
@@ -38,34 +32,7 @@ pub enum TypeError {
 
 pub type TypeRes<T> = Result<T, TypeError>;
 
-impl GetArena for Context {
-    fn get_arena(&self) -> &Arena {
-        &self.arena
-    }
-
-    fn get_arena_mut(&mut self) -> &mut Arena {
-        &mut self.arena
-    }
-}
-
-impl GetInterner<t::Type> for Context {
-    fn get_interner(&self) -> &Interner<t::Type> {
-        &self.type_interner
-    }
-
-    fn get_interner_mut(&mut self) -> &mut Interner<t::Type> {
-        &mut self.type_interner
-    }
-}
-
 impl Context {
-    pub fn new() -> Self {
-        Context {
-            next_type_var: 0,
-            arena: Arena::new(),
-            type_interner: Interner::new(),
-        }
-    }
 
     fn bump_fresh_type_var(&mut self) -> t::TypeId {
         let index = self.next_type_var;
@@ -111,27 +78,31 @@ impl Context {
         }
     }
 
-    fn get_expr_type(&mut self, expr: t::ExprIdSum) -> t::TypeId {
+    fn get_expr_type(&mut self, expr: t::ExprId) -> t::TypeId {
         match expr {
-            t::ExprIdSum::Literal(literal_expr_id) => {
+            t::ExprId::Literal(literal_expr_id) => {
                 let literal_expr = literal_expr_id.de(self);
                 literal_expr.ty
             }
-            t::ExprIdSum::Application(app_expr_id) => {
+            t::ExprId::Application(app_expr_id) => {
                 let app_expr = app_expr_id.de(self);
                 app_expr.ty
             }
-            t::ExprIdSum::Tuple(tuple_expr_id) => {
+            t::ExprId::Tuple(tuple_expr_id) => {
                 let tuple_expr = tuple_expr_id.de(self);
                 tuple_expr.ty
             }
-            t::ExprIdSum::Variable(id) => {
+            t::ExprId::Variable(id) => {
                 let variable_expr = id.de(self);
                 variable_expr.ty
             }
-            t::ExprIdSum::Block(id) => {
+            t::ExprId::Block(id) => {
                 let block_expr = id.de(self);
                 block_expr.block.de(self).ty
+            }
+            t::ExprId::Projection(id)   => {
+                let projection_expr = id.de(self);
+                projection_expr.ty
             }
         }
     }
@@ -346,8 +317,8 @@ impl Context {
             typed_stmts.push(typed_stmt);
         }
         let last_stmt = typed_stmts.last().unwrap();
-        let ty = match last_stmt.deref(&self.arena) {
-            t::Stmt::Expr(e) => e.deref(&self.arena).ty(&self.arena),
+        let ty = match last_stmt.de(&self.arena) {
+            t::Stmt::Expr(e) => e.de(&self.arena).ty(&self.arena),
             _ => t::Type::unit().en(self),
         };
         Ok(self.arena.bind_new_id_to(t::Block {
@@ -359,7 +330,7 @@ impl Context {
 
     /// Type THE expression, not type expression.
     /// Does not do the HM inference
-    pub fn type_expr(&mut self, binding_head: BindingId, expr: &u::Expr) -> TypeRes<t::ExprIdSum> {
+    pub fn type_expr(&mut self, binding_head: BindingId, expr: &u::Expr) -> TypeRes<t::ExprId> {
         match expr {
             u::Expr::Unit { span } => {
                 let e = t::TupleExpr {
@@ -368,7 +339,7 @@ impl Context {
                     ty: t::TupleType { elems: vec![] }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
-                Ok(t::ExprIdSum::Tuple(id))
+                Ok(t::ExprId::Tuple(id))
             }
             u::Expr::Int { value, span } => {
                 let e = t::LiteralExpr {
@@ -377,7 +348,7 @@ impl Context {
                     ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
-                Ok(t::ExprIdSum::Literal(id))
+                Ok(t::ExprId::Literal(id))
             }
             u::Expr::Bool { value, span } => {
                 let e = t::LiteralExpr {
@@ -386,7 +357,7 @@ impl Context {
                     ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
-                Ok(t::ExprIdSum::Literal(id))
+                Ok(t::ExprId::Literal(id))
             }
             u::Expr::Var { name, span } => {
                 let name = name.clone().intern();
@@ -398,7 +369,7 @@ impl Context {
                             ty,
                             span: *span,
                         };
-                        return Ok(t::ExprIdSum::Variable(self.arena.bind_new_id_to(v)));
+                        return Ok(t::ExprId::Variable(self.arena.bind_new_id_to(v)));
                     }
                 }
                 Err(TypeError::UnboundVar {
@@ -463,7 +434,7 @@ impl Context {
                     span: *span,
                 };
                 let id = self.arena.bind_new_id_to(e);
-                Ok(t::ExprIdSum::Application(id))
+                Ok(t::ExprId::Application(id))
             }
             u::Expr::Tuple { elems, span } => {
                 let mut typed_elems = Vec::new();
@@ -479,13 +450,13 @@ impl Context {
                     ty: t::TupleType { elems: elem_types }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
-                Ok(t::ExprIdSum::Tuple(id))
+                Ok(t::ExprId::Tuple(id))
             }
             u::Expr::Block(block) => {
                 let block_id = self.type_block(binding_head, block)?;
                 let block_expr = t::BlockExpr { block: block_id };
                 let id = self.arena.bind_new_id_to(block_expr);
-                Ok(t::ExprIdSum::Block(id))
+                Ok(t::ExprId::Block(id))
             }
         }
     }
@@ -601,7 +572,7 @@ impl TypeIdMapper for Context {
 
 #[cfg(test)]
 mod test {
-    use crate::ast::typed::ExprIdSum;
+    use crate::ast::typed::ExprId;
     use crate::diag::print_error;
     use crate::{ast::typed::Binding, parser, sema::typing::Context};
     #[test]
@@ -618,7 +589,7 @@ mod test {
             .map_err(|e| print_error(e, code, &mut c.type_interner));
         println!("Typed expr: {:?}", te);
         let te = te.unwrap();
-        let ty = te.deref(&c.arena).ty(&c.arena);
+        let ty = te.de(&c.arena).ty(&c.arena);
         let sln = c
             .solve_constraints()
             .map_err(|e| print_error(e, code, &mut c.type_interner));

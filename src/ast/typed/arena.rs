@@ -1,30 +1,23 @@
-use crate::{ast::{id::*, typed::*}, sema::inference::Constraint, utils::interning::InternString};
+use crate::{ast::{id::*, typed::*}, backend::Instruction, sema::inference::Constraint, utils::interning::InternString};
 
 /// Where id maps are stored. With Arena, you can get the value pointed to by an [Id].
 #[derive(Default)]
 pub struct Arena {
-    // EXPR
     pub idmap_literal_expr: IdMap<LiteralExpr>,
     pub idmap_variable_expr: IdMap<VariableExpr>,
     pub idmap_application_expr: IdMap<ApplicationExpr>,
     pub idmap_block_expr: IdMap<BlockExpr>,
     pub idmap_tuple_expr: IdMap<TupleExpr>,
-
-    // PATTERN
+    pub idmap_projection_expr: IdMap<ProjectionExpr>,
     pub idmap_variable_pattern: IdMap<VariablePattern>,
     pub idmap_tuple_pattern: IdMap<TuplePattern>,
-
-    // STMT
     pub idmap_let_stmt: IdMap<LetStmt>,
     pub idmap_function_stmt: IdMap<FunctionStmt>,
     pub idmap_empty_stmt: IdMap<EmptyStmt>,
-
-    // defs
     pub idmap_def: IdMap<Binding>,
-
-    // OTHERS
     pub idmap_block: IdMap<Block>,
     pub idmap_constraint: IdMap<Constraint>,
+    pub idmap_inst: IdMap<Instruction>,
 }
 
 pub trait GetArena {
@@ -110,6 +103,15 @@ impl ArenaItem for TupleExpr {
     }
     fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self> {
         &mut context.idmap_tuple_expr
+    }
+}
+
+impl ArenaItem for ProjectionExpr {
+    fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
+        &context.idmap_projection_expr
+    }
+    fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self> {
+        &mut context.idmap_projection_expr
     }
 }
 

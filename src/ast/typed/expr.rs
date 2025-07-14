@@ -24,8 +24,8 @@ pub struct VariableExpr {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct ApplicationExpr {
-    pub callee: ExprIdSum,
-    pub arg: ExprIdSum,
+    pub callee: ExprId,
+    pub arg: ExprId,
     pub ty: TypeId,
     pub constraint: Id<Constraint>,
     pub span: (usize, usize),
@@ -38,7 +38,15 @@ pub struct BlockExpr {
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct TupleExpr {
-    pub elems: Vec<ExprIdSum>,
+    pub elems: Vec<ExprId>,
+    pub span: (usize, usize),
+    pub ty: TypeId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub struct ProjectionExpr {
+    pub target: ExprId,
+    pub index: usize,
     pub span: (usize, usize),
     pub ty: TypeId,
 }
@@ -51,43 +59,47 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]
-pub enum ExprIdSum {
+pub enum ExprId {
     Literal(Id<LiteralExpr>),
     Variable(Id<VariableExpr>),
     Application(Id<ApplicationExpr>),
     Block(Id<BlockExpr>),
     Tuple(Id<TupleExpr>),
+    Projection(Id<ProjectionExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum ExprSum {
+pub enum Expr {
     Literal(LiteralExpr),
     Variable(VariableExpr),
     Application(ApplicationExpr),
     Block(BlockExpr),
     Tuple(TupleExpr),
+    Projection(ProjectionExpr),
 }
 
-impl ExprIdSum {
-    pub fn deref(self, arena: &impl GetArena) -> ExprSum {
+impl ExprId {
+    pub fn de(self, arena: &impl GetArena) -> Expr {
         match self {
-            ExprIdSum::Literal(id) => ExprSum::Literal(id.de(arena) ),
-            ExprIdSum::Variable(id) => ExprSum::Variable(id.de(arena)),
-            ExprIdSum::Application(id) => ExprSum::Application(id.de(arena)),
-            ExprIdSum::Block(id) => ExprSum::Block(id.de(arena)),
-            ExprIdSum::Tuple(id) => ExprSum::Tuple(id.de(arena)),
+            ExprId::Literal(id) => Expr::Literal(id.de(arena) ),
+            ExprId::Variable(id) => Expr::Variable(id.de(arena)),
+            ExprId::Application(id) => Expr::Application(id.de(arena)),
+            ExprId::Block(id) => Expr::Block(id.de(arena)),
+            ExprId::Tuple(id) => Expr::Tuple(id.de(arena)),
+            ExprId::Projection(id) => Expr::Projection(id.de(arena)),
         }
     }
 }
 
-impl ExprSum {
+impl Expr {
     pub fn ty(&self, arena: &impl GetArena) -> TypeId {
         match self {
-            ExprSum::Literal(expr) => expr.ty,
-            ExprSum::Variable(expr) => expr.ty,
-            ExprSum::Application(expr) => expr.ty,
-            ExprSum::Block(expr) => expr.block.de(arena).ty,
-            ExprSum::Tuple(expr) => expr.ty,
+            Expr::Literal(expr) => expr.ty,
+            Expr::Variable(expr) => expr.ty,
+            Expr::Application(expr) => expr.ty,
+            Expr::Block(expr) => expr.block.de(arena).ty,
+            Expr::Tuple(expr) => expr.ty,
+            Expr::Projection(expr) => expr.ty,
         }
     }
 }

@@ -31,7 +31,7 @@ pub enum Pattern {
 }
 
 impl PatternId {
-    pub fn deref(self, arena: &Arena) -> Pattern {
+    pub fn de(self, arena: &impl GetArena) -> Pattern {
         match self {
             PatternId::Variable(id) => Pattern::Variable(id.de(arena)),
             PatternId::Tuple(id) => Pattern::Tuple(id.de(arena)),

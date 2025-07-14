@@ -4,7 +4,7 @@ use sight_macros::LiteralValue;
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct LetStmt {
     pub lhs: PatternId,
-    pub rhs: ExprIdSum,
+    pub rhs: ExprId,
     pub constraint: Id<Constraint>,
     pub span: (usize, usize),
 }
@@ -28,7 +28,7 @@ pub enum StmtId {
     Let(Id<LetStmt>),
     Function(Id<FunctionStmt>),
     Block(Id<Block>),
-    Expr(ExprIdSum),
+    Expr(ExprId),
     Empty(Id<EmptyStmt>),
 }
 
@@ -37,13 +37,12 @@ pub enum Stmt {
     Let(LetStmt),
     Function(FunctionStmt),
     Block(Block),
-    Expr(ExprIdSum),
+    Expr(ExprId),
     Empty(EmptyStmt),
 }
 
 impl StmtId {
-    pub fn deref<T: GetArena>(self, arena: &T) -> Stmt {
-        let arena = arena.get_arena();
+    pub fn de(self, arena: &impl GetArena) -> Stmt {
         match self {
             StmtId::Let(id) => Stmt::Let(id.de(arena)),
             StmtId::Function(id) => Stmt::Function(id.de(arena)),
