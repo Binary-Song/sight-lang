@@ -4,10 +4,11 @@ use crate::lexer::TokenType;
 use crate::parser::ParseErr;
 use crate::parser::Parser;
 use crate::parser::PeekerResult;
+use crate::span::HasSpan;
 use crate::span::Span;
 use function_name::named;
 use sight_macros::NumConv;
-use tracing::{instrument};
+use tracing::instrument;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, NumConv)]
 pub enum Prec {
@@ -41,10 +42,13 @@ impl<'a> Parser<'a> {
         let rule = function_name!();
         let token = self.expect_any(&[TokenType::Ident, TokenType::IntLit], rule)?;
         match token {
-            Token::Ident(name, span) => Ok(Expr::Var { name, span }),
+            Token::Ident(name, span) => Ok(Expr::Var {
+                name,
+                span: Some(span),
+            }),
             Token::IntLit(lexeme, span) => Ok(Expr::Int {
                 value: lexeme.parse::<i32>().unwrap(),
-                span,
+                span: Some(span),
             }),
             _ => panic!(
                 "Logic error: expected primitive_expr token, got {:?}",
@@ -55,7 +59,7 @@ impl<'a> Parser<'a> {
 
     #[named]
     #[instrument(ret)]
-    pub fn unit(&mut self) -> Result<(usize, usize), ParseErr> {
+    pub fn unit(&mut self) -> Result<Span, ParseErr> {
         let mut peeker = {
             // the peeker state
             let mut seen_lparen = false;
@@ -72,7 +76,7 @@ impl<'a> Parser<'a> {
             }
         };
         let tokens = self.expect_any_with_peeker(&mut peeker, "unit", function_name!())?;
-        Ok((tokens[0].span().0, tokens.last().unwrap().span().1))
+        Ok(Span(tokens[0].span(), tokens.last().unwrap().span().1))
     }
 
     #[named]
@@ -204,21 +208,3 @@ impl<'a> Parser<'a> {
         }
     }
 }
-
-// impl display::WithPrec<crate::parser::exprs::Prec> for Expr {
-//     /// Returns the precedence of the expression.
-//     /// None means never put parentheses around it.
-//     fn prec(&self) -> Option<Prec> {
-//         match self {
-//             Expr::Unit { .. } => None,
-//             Expr::Int { .. } => None,
-//             Expr::Bool { .. } => None,
-//             Expr::Var { .. } => None,
-//             Expr::UnaryOp {  .. } => todo!(),
-//             Expr::BinaryOp { op, .. } => Some(op.prec()),
-//             Expr::App { .. } => Some(Prec::App),
-//             Expr::Tuple { .. } => Some(Prec::Tuple),
-//             Expr::Block(_) => None,
-//         }
-//     }
-// }

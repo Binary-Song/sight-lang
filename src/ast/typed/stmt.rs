@@ -1,12 +1,13 @@
 use crate::{ast::typed::*, sema::inference::Constraint};
 use sight_macros::LiteralValue;
+use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct LetStmt {
     pub lhs: PatternId,
     pub rhs: ExprId,
     pub constraint: Id<Constraint>,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -15,12 +16,12 @@ pub struct FunctionStmt {
     pub param: PatternId,
     pub ret_ty: TypeId,
     pub body: Id<Block>,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct EmptyStmt {
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]

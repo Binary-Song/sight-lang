@@ -1,46 +1,48 @@
+use crate::span::Span;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
-    EqEq((usize, usize)),
-    NotEq((usize, usize)),
-    Le((usize, usize)),
-    Ge((usize, usize)),
-    AndAnd((usize, usize)),
-    OrOr((usize, usize)),
-    Arrow((usize, usize)),
-    FatArrow((usize, usize)),
+    EqEq(Span),
+    NotEq(Span),
+    Le(Span),
+    Ge(Span),
+    AndAnd(Span),
+    OrOr(Span),
+    Arrow(Span),
+    FatArrow(Span),
 
-    Plus((usize, usize)),
-    Minus((usize, usize)),
-    Star((usize, usize)),
-    Slash((usize, usize)),
-    Percent((usize, usize)),
-    Not((usize, usize)),
-    Lt((usize, usize)),
-    Gt((usize, usize)),
-    Eq((usize, usize)),
+    Plus(Span),
+    Minus(Span),
+    Star(Span),
+    Slash(Span),
+    Percent(Span),
+    Not(Span),
+    Lt(Span),
+    Gt(Span),
+    Eq(Span),
 
-    LParen((usize, usize)),
-    RParen((usize, usize)),
-    LBrace((usize, usize)),
-    RBrace((usize, usize)),
+    LParen(Span),
+    RParen(Span),
+    LBrace(Span),
+    RBrace(Span),
 
-    Comma((usize, usize)),
-    Semicolon((usize, usize)),
-    Colon((usize, usize)),
-    Dot((usize, usize)),
+    Comma(Span),
+    Semicolon(Span),
+    Colon(Span),
+    Dot(Span),
 
-    IntLit(String, (usize, usize)),
+    IntLit(String, Span),
 
-    True((usize, usize)),
-    False((usize, usize)),
-    Fn((usize, usize)),
-    Let((usize, usize)),
-    Bool((usize, usize)),
-    Int((usize, usize)),
+    True(Span),
+    False(Span),
+    Fn(Span),
+    Let(Span),
+    Bool(Span),
+    Int(Span),
 
-    Ident(String, (usize, usize)),
-    BadUtf8Char(u8, (usize, usize)), // 新增：非法UTF-8字节
-    Eof((usize, usize)),
+    Ident(String, Span),
+    BadUtf8Char(u8, Span), // 新增：非法UTF-8字节
+    Eof(Span),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,7 +143,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// 匹配字符串，支持EOF和非法UTF-8
-    fn match_str(&mut self, s: &str) -> Option<(usize, usize)> {
+    fn match_str(&mut self, s: &str) -> Option<Span> {
         let mut temp_pos = self.pos;
         let mut matched = true;
         for expected in s.chars() {
@@ -164,7 +166,7 @@ impl<'a> Lexer<'a> {
         if matched {
             let start = self.pos;
             self.pos = temp_pos;
-            Some((start, self.pos))
+            Some(Span(start, self.pos))
         } else {
             None
         }
@@ -186,19 +188,19 @@ impl<'a> Lexer<'a> {
         // EOF
         if c == '\0' {
             self.next_char();
-            return Token::Eof((start, self.pos));
+            return Token::Eof(Span(start, self.pos));
         }
 
         // 非法UTF-8
         if c == '\u{FFFD}' {
             let bad_byte = self.input.as_bytes().get(self.pos).copied().unwrap_or(0);
             self.next_char();
-            return Token::BadUtf8Char(bad_byte, (start, self.pos));
+            return Token::BadUtf8Char(bad_byte, Span(start, self.pos));
         }
 
         // 优先匹配双字符操作符
         let two_char_ops = [
-            ("==", Token::EqEq as fn((usize, usize)) -> Token),
+            ("==", Token::EqEq as fn(Span) -> Token),
             ("!=", Token::NotEq),
             ("<=", Token::Le),
             (">=", Token::Ge),
@@ -219,71 +221,71 @@ impl<'a> Lexer<'a> {
         let token = match c {
             '+' => {
                 self.next_char();
-                Token::Plus((start, self.pos))
+                Token::Plus(Span(start, self.pos))
             }
             '-' => {
                 self.next_char();
-                Token::Minus((start, self.pos))
+                Token::Minus(Span(start, self.pos))
             }
             '*' => {
                 self.next_char();
-                Token::Star((start, self.pos))
+                Token::Star(Span(start, self.pos))
             }
             '/' => {
                 self.next_char();
-                Token::Slash((start, self.pos))
+                Token::Slash(Span(start, self.pos))
             }
             '%' => {
                 self.next_char();
-                Token::Percent((start, self.pos))
+                Token::Percent(Span(start, self.pos))
             }
             '!' => {
                 self.next_char();
-                Token::Not((start, self.pos))
+                Token::Not(Span(start, self.pos))
             }
             '=' => {
                 self.next_char();
-                Token::Eq((start, self.pos))
+                Token::Eq(Span(start, self.pos))
             }
             '<' => {
                 self.next_char();
-                Token::Lt((start, self.pos))
+                Token::Lt(Span(start, self.pos))
             }
             '>' => {
                 self.next_char();
-                Token::Gt((start, self.pos))
+                Token::Gt(Span(start, self.pos))
             }
             '(' => {
                 self.next_char();
-                Token::LParen((start, self.pos))
+                Token::LParen(Span(start, self.pos))
             }
             ')' => {
                 self.next_char();
-                Token::RParen((start, self.pos))
+                Token::RParen(Span(start, self.pos))
             }
             '{' => {
                 self.next_char();
-                Token::LBrace((start, self.pos))
+                Token::LBrace(Span(start, self.pos))
             }
             '}' => {
                 self.next_char();
-                Token::RBrace((start, self.pos))
+                Token::RBrace(Span(start, self.pos))
             }
             ',' => {
                 self.next_char();
-                Token::Comma((start, self.pos))
+                Token::Comma(Span(start, self.pos))
             }
             ';' => {
                 self.next_char();
-                Token::Semicolon((start, self.pos))
+                Token::Semicolon(Span(start, self.pos))
             }
             ':' => {
                 self.next_char();
-                Token::Colon((start, self.pos))
+                Token::Colon(Span(start, self.pos))
             }
             '.' => {
                 self.next_char();
-                Token::Dot((start, self.pos))
+                Token::Dot(Span(start, self.pos))
             }
             _ => {
                 // 不是单字符操作符
@@ -294,7 +296,7 @@ impl<'a> Lexer<'a> {
                     }
                     let end = self.pos;
                     let s = &self.input[start..end];
-                    Token::IntLit(s.to_string(), (start, end))
+                    Token::IntLit(s.to_string(), Span(start, end))
                 } else if c.is_ascii_alphabetic() || c == '_' {
                     let start = self.pos;
                     while {
@@ -306,13 +308,13 @@ impl<'a> Lexer<'a> {
                     let end = self.pos;
                     let s = &self.input[start..end];
                     match s {
-                        "true" => Token::True((start, end)),
-                        "false" => Token::False((start, end)),
-                        "fn" => Token::Fn((start, end)),
-                        "let" => Token::Let((start, end)),
-                        "bool" => Token::Bool((start, end)),
-                        "int" => Token::Int((start, end)),
-                        _ => Token::Ident(s.to_string(), (start, end)),
+                        "true" => Token::True(Span(start, end)),
+                        "false" => Token::False(Span(start, end)),
+                        "fn" => Token::Fn(Span(start, end)),
+                        "let" => Token::Let(Span(start, end)),
+                        "bool" => Token::Bool(Span(start, end)),
+                        "int" => Token::Int(Span(start, end)),
+                        _ => Token::Ident(s.to_string(), Span(start, end)),
                     }
                 } else {
                     // 跳过无法识别的字符
@@ -326,8 +328,6 @@ impl<'a> Lexer<'a> {
 }
 
 impl Token {
-
-
     pub fn token_type(&self) -> TokenType {
         match self {
             Token::EqEq(_) => TokenType::EqEq,
@@ -434,23 +434,23 @@ mod tests {
         let input = "+-*/%!<>(){};,.:=";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::Plus((0, 1)),
-            Token::Minus((1, 2)),
-            Token::Star((2, 3)),
-            Token::Slash((3, 4)),
-            Token::Percent((4, 5)),
-            Token::Not((5, 6)),
-            Token::Lt((6, 7)),
-            Token::Gt((7, 8)),
-            Token::LParen((8, 9)),
-            Token::RParen((9, 10)),
-            Token::LBrace((10, 11)),
-            Token::RBrace((11, 12)),
-            Token::Semicolon((12, 13)),
-            Token::Comma((13, 14)),
-            Token::Dot((14, 15)),
-            Token::Colon((15, 16)),
-            Token::Eq((16, 17)),
+            Token::Plus(Span(0, 1)),
+            Token::Minus(Span(1, 2)),
+            Token::Star(Span(2, 3)),
+            Token::Slash(Span(3, 4)),
+            Token::Percent(Span(4, 5)),
+            Token::Not(Span(5, 6)),
+            Token::Lt(Span(6, 7)),
+            Token::Gt(Span(7, 8)),
+            Token::LParen(Span(8, 9)),
+            Token::RParen(Span(9, 10)),
+            Token::LBrace(Span(10, 11)),
+            Token::RBrace(Span(11, 12)),
+            Token::Semicolon(Span(12, 13)),
+            Token::Comma(Span(13, 14)),
+            Token::Dot(Span(14, 15)),
+            Token::Colon(Span(15, 16)),
+            Token::Eq(Span(16, 17)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -460,14 +460,14 @@ mod tests {
         let input = "== != <= >= && || -> =>";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::EqEq((0, 2)),
-            Token::NotEq((3, 5)),
-            Token::Le((6, 8)),
-            Token::Ge((9, 11)),
-            Token::AndAnd((12, 14)),
-            Token::OrOr((15, 17)),
-            Token::Arrow((18, 20)),
-            Token::FatArrow((21, 23)),
+            Token::EqEq(Span(0, 2)),
+            Token::NotEq(Span(3, 5)),
+            Token::Le(Span(6, 8)),
+            Token::Ge(Span(9, 11)),
+            Token::AndAnd(Span(12, 14)),
+            Token::OrOr(Span(15, 17)),
+            Token::Arrow(Span(18, 20)),
+            Token::FatArrow(Span(21, 23)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -477,9 +477,9 @@ mod tests {
         let input = "42 123456 0";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::IntLit("42".into(), (0, 2)),
-            Token::IntLit("123456".into(), (3, 9)),
-            Token::IntLit("0".into(), (10, 11)),
+            Token::IntLit("42".into(), Span(0, 2)),
+            Token::IntLit("123456".into(), Span(3, 9)),
+            Token::IntLit("0".into(), Span(10, 11)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -489,14 +489,14 @@ mod tests {
         let input = "true false fn let bool int _id var123";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::True((0, 4)),
-            Token::False((5, 10)),
-            Token::Fn((11, 13)),
-            Token::Let((14, 17)),
-            Token::Bool((18, 22)),
-            Token::Int((23, 26)),
-            Token::Ident("_id".into(), (27, 30)),
-            Token::Ident("var123".into(), (31, 37)),
+            Token::True(Span(0, 4)),
+            Token::False(Span(5, 10)),
+            Token::Fn(Span(11, 13)),
+            Token::Let(Span(14, 17)),
+            Token::Bool(Span(18, 22)),
+            Token::Int(Span(23, 26)),
+            Token::Ident("_id".into(), Span(27, 30)),
+            Token::Ident("var123".into(), Span(31, 37)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -506,10 +506,10 @@ mod tests {
         let input = "  \t\n  let    x = 10  ";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::Let((6, 9)),
-            Token::Ident("x".into(), (13, 14)),
-            Token::Eq((15, 16)),
-            Token::IntLit("10".into(), (17, 19)),
+            Token::Let(Span(6, 9)),
+            Token::Ident("x".into(), Span(13, 14)),
+            Token::Eq(Span(15, 16)),
+            Token::IntLit("10".into(), Span(17, 19)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -519,15 +519,15 @@ mod tests {
         let input = "let x = a + 10 == 20;";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::Let((0, 3)),
-            Token::Ident("x".into(), (4, 5)),
-            Token::Eq((6, 7)),
-            Token::Ident("a".into(), (8, 9)),
-            Token::Plus((10, 11)),
-            Token::IntLit("10".into(), (12, 14)),
-            Token::EqEq((15, 17)),
-            Token::IntLit("20".into(), (18, 20)),
-            Token::Semicolon((20, 21)),
+            Token::Let(Span(0, 3)),
+            Token::Ident("x".into(), Span(4, 5)),
+            Token::Eq(Span(6, 7)),
+            Token::Ident("a".into(), Span(8, 9)),
+            Token::Plus(Span(10, 11)),
+            Token::IntLit("10".into(), Span(12, 14)),
+            Token::EqEq(Span(15, 17)),
+            Token::IntLit("20".into(), Span(18, 20)),
+            Token::Semicolon(Span(20, 21)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -537,11 +537,11 @@ mod tests {
         let input = "#@ let $x = 42;";
         let tokens = lex_all(input);
         let expected = vec![
-            Token::Let((3, 6)),
-            Token::Ident("x".into(), (8, 9)),
-            Token::Eq((10, 11)),
-            Token::IntLit("42".into(), (12, 14)),
-            Token::Semicolon((14, 15)),
+            Token::Let(Span(3, 6)),
+            Token::Ident("x".into(), Span(8, 9)),
+            Token::Eq(Span(10, 11)),
+            Token::IntLit("42".into(), Span(12, 14)),
+            Token::Semicolon(Span(14, 15)),
         ];
         assert_eq!(tokens, expected);
     }
@@ -550,18 +550,24 @@ mod tests {
     fn test_spans_are_correct() {
         let input = "fn my_var = 123;";
         let tokens = lex_all(input);
-        let spans: Vec<(usize, usize)> = tokens
+        let spans: Vec<Span> = tokens
             .iter()
             .map(|t| match t {
                 Token::Fn(span)
                 | Token::Ident(_, span)
                 | Token::Eq(span)
                 | Token::IntLit(_, span)
-                | Token::Semicolon(span) => *span,
+                | Token::Semicolon(span) => span.clone(),
                 _ => panic!("unexpected token in test"),
             })
             .collect();
-        let expected_spans = vec![(0, 2), (3, 9), (10, 11), (12, 15), (15, 16)];
+        let expected_spans = vec![
+            Span(0, 2),
+            Span(3, 9),
+            Span(10, 11),
+            Span(12, 15),
+            Span(15, 16),
+        ];
         assert_eq!(spans, expected_spans);
     }
 }

@@ -1,7 +1,7 @@
 use crate::lexer::Token;
 use crate::lexer::TokenType;
 use crate::parser::*;
-use crate::span::Span;
+use crate::span::HasSpan;
 use function_name::named;
 use std::vec;
 use tracing::instrument;

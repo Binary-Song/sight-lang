@@ -4,7 +4,7 @@ use crate::lexer::TokenType;
 use crate::parser::type_exprs::Prec as TypePrec;
 use crate::parser::ParseErr;
 use crate::parser::Parser;
-use crate::span::Span;
+use crate::span::HasSpan;
 use function_name::named;
 use sight_macros::NumConv;
 use tracing::instrument;

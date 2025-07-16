@@ -1,14 +1,18 @@
 use crate::{
-    ast::{  Expr, Pattern, Stmt, TypeExpr},
+    ast::{Expr, Pattern, Stmt, TypeExpr},
     lexer::Token,
 };
+use sight_macros::LiteralValue;
 
-pub trait Span {
-    fn span(self: &Self) -> (usize, usize);
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
+pub struct Span(pub usize, pub usize);
+
+pub trait HasSpan {
+    fn span(self: &Self) -> Option<Span>;
 }
 
-impl Span for Expr {
-    fn span(self: &Expr) -> (usize, usize) {
+impl HasSpan for Expr {
+    fn span(self: &Expr) -> Option<Span> {
         match self {
             Expr::Unit { span }
             | Expr::Int { span, .. }
@@ -17,27 +21,26 @@ impl Span for Expr {
             | Expr::UnaryOp { span, .. }
             | Expr::BinaryOp { span, .. }
             | Expr::App { span, .. }
-            | Expr::Tuple { span, .. } => *span,
-            Expr::Block(b) => b.span,
+            | Expr::Tuple { span, .. } => span.clone(),
+            Expr::Block(b) => b.span.clone(),
         }
     }
 }
 
-impl Span for TypeExpr {
-    fn span(self: &Self) -> (usize, usize) {
+impl HasSpan for TypeExpr {
+    fn span(self: &Self) -> Option<Span> {
         match self {
             TypeExpr::Unit { span, .. }
             | TypeExpr::Bool { span, .. }
             | TypeExpr::Int { span, .. }
             | TypeExpr::Arrow { span, .. }
-            | TypeExpr::Tuple { span, .. } => *span,
+            | TypeExpr::Tuple { span, .. } => span.clone(),
         }
     }
 }
 
-
-impl Span for Token {
-    fn span(&self) -> (usize, usize) {
+impl HasSpan for Token {
+    fn span(&self) -> Option<Span> {
         match self {
             Token::EqEq(span)
             | Token::NotEq(span)
@@ -73,29 +76,29 @@ impl Span for Token {
             | Token::Int(span)
             | Token::Ident(_, span)
             | Token::BadUtf8Char(_, span)
-            | Token::Eof(span) => *span,
+            | Token::Eof(span) => Some(span.clone()),
         }
     }
 }
 
-impl Span for Pattern {
-    fn span(self: &Self) -> (usize, usize) {
+impl HasSpan for Pattern {
+    fn span(self: &Self) -> Option<Span> {
         match self {
-            Pattern::Unit { span } |
-            Pattern::Var { span, .. } |
-            Pattern::Tuple { span, .. } => *span,
+            Pattern::Unit { span } | Pattern::Var { span, .. } | Pattern::Tuple { span, .. } => {
+                span.clone()
+            }
         }
     }
 }
 
-impl Span for Stmt {
-    fn span(self: &Self) -> (usize, usize) {
+impl HasSpan for Stmt {
+    fn span(self: &Self) -> Option<Span> {
         match self {
-            Stmt::Let { span, .. } => *span,
-            Stmt::Func(func) => func.span,
-            Stmt::Block(block) => block.span,
-            Stmt::Expr { span, .. } => *span,
-            Stmt::Empty { span } => *span,
+            Stmt::Let { span, .. } => span.clone(),
+            Stmt::Func(func) => func.span.clone(),
+            Stmt::Block(block) => block.span.clone(),
+            Stmt::Expr { span, .. } => span.clone(),
+            Stmt::Empty { span } => span.clone(),
         }
     }
 }

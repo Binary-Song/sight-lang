@@ -8,6 +8,7 @@ use crate::ast::typed::GetArena;
 use crate::ast::typed::{self as t, BindingData, FunctionType};
 use crate::ast::typed::{Arena, BindingId};
 use crate::sema::inference::{Constraint, Solution};
+use crate::span::Span;
 use crate::utils::interning::GetInterner;
 use crate::utils::interning::Internable;
 use crate::utils::interning::{InternString, Interner, StaticInternable};
@@ -19,7 +20,7 @@ use crate::context::Context;
 pub enum TypeError {
     UnboundVar {
         name: InternString,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     DuplicateBinding {
         binding: BindingId,
@@ -153,7 +154,7 @@ impl Context {
                 let variable_pattern = t::VariablePattern {
                     binding_id: binding,
                     ty,
-                    span: *span,
+                    span: span.clone(),
                 };
                 let variable_pattern_id = self.arena.bind_new_id_to(variable_pattern);
                 (t::PatternId::Variable(variable_pattern_id), binding)
@@ -168,7 +169,7 @@ impl Context {
                 let tup_patt = t::TuplePattern {
                     elems: patts,
                     ty: t::TupleType { elems: vec![] }.to_type().en(self),
-                    span: *span,
+                    span: span.clone(),
                 };
                 (
                     t::PatternId::Tuple(self.arena.bind_new_id_to(tup_patt)),
@@ -178,7 +179,7 @@ impl Context {
             u::Pattern::Unit { span } => {
                 let tup = u::Pattern::Tuple {
                     elems: vec![],
-                    span: *span,
+                    span: span.clone()
                 };
                 self.type_pattern(binding_head, &tup)
             }
@@ -277,7 +278,7 @@ impl Context {
                     let id = self.arena.bind_new_id_to(t::LetStmt {
                         lhs: lhs_typed,
                         rhs: rhs_typed,
-                        span: *span,
+                        span: span.clone(),
                         constraint: c,
                     });
                     t::StmtId::Let(id)
@@ -298,7 +299,7 @@ impl Context {
                         param: data.typed_param,
                         ret_ty: data.return_type,
                         body: data.body_id,
-                        span: func.span,
+                        span: func.span.clone(),
                     };
                     t::StmtId::Function(self.arena.bind_new_id_to(fn_stmt))
                 }
@@ -311,7 +312,7 @@ impl Context {
                     t::StmtId::Expr(expr_typed)
                 }
                 u::Stmt::Empty { span } => {
-                    t::StmtId::Empty(self.arena.bind_new_id_to(t::EmptyStmt { span: *span }))
+                    t::StmtId::Empty(self.arena.bind_new_id_to(t::EmptyStmt { span: span.clone() }))
                 }
             };
             typed_stmts.push(typed_stmt);
@@ -323,19 +324,19 @@ impl Context {
         };
         Ok(self.arena.bind_new_id_to(t::Block {
             stmts: typed_stmts,
-            span: block.span,
+            span: block.span.clone(),
             ty: ty,
         }))
     }
 
-    /// Type THE expression, not type expression.
+    /// Computes the type of the expr.
     /// Does not do the HM inference
     pub fn type_expr(&mut self, binding_head: BindingId, expr: &u::Expr) -> TypeRes<t::ExprId> {
         match expr {
             u::Expr::Unit { span } => {
                 let e = t::TupleExpr {
                     elems: vec![],
-                    span: *span,
+                    span: span.clone(),
                     ty: t::TupleType { elems: vec![] }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
@@ -344,7 +345,7 @@ impl Context {
             u::Expr::Int { value, span } => {
                 let e = t::LiteralExpr {
                     value: t::Literal::Int(*value),
-                    span: *span,
+                    span: span.clone(),
                     ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
@@ -353,7 +354,7 @@ impl Context {
             u::Expr::Bool { value, span } => {
                 let e = t::LiteralExpr {
                     value: t::Literal::Bool(*value),
-                    span: *span,
+                    span: span.clone(),
                     ty: t::PrimitiveType::Int.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);
@@ -367,14 +368,14 @@ impl Context {
                             target: binding,
                             name: name,
                             ty,
-                            span: *span,
+                            span: span.clone(),
                         };
                         return Ok(t::ExprId::Variable(self.arena.bind_new_id_to(v)));
                     }
                 }
                 Err(TypeError::UnboundVar {
                     name: name,
-                    span: (*span).into(),
+                    span: span.clone()
                 })
             }
             u::Expr::UnaryOp {
@@ -387,10 +388,10 @@ impl Context {
                 &u::Expr::App {
                     func: Box::new(u::Expr::Var {
                         name: op.name(),
-                        span: *op_span,
+                        span: op_span.clone(),
                     }),
                     arg: arg.clone(),
-                    span: *span,
+                    span: span.clone(),
                 },
             ),
             u::Expr::BinaryOp {
@@ -404,13 +405,13 @@ impl Context {
                 &u::Expr::App {
                     func: Box::new(u::Expr::Var {
                         name: op.name(),
-                        span: *op_span,
+                        span: op_span.clone(),
                     }),
                     arg: Box::new(u::Expr::Tuple {
                         elems: vec![*lhs.clone(), *rhs.clone()],
-                        span: *span,
+                        span: span.clone(),
                     }),
-                    span: *span,
+                    span: span.clone(),
                 },
             ),
             u::Expr::App { func, arg, span } => {
@@ -431,7 +432,7 @@ impl Context {
                     arg: arg_typed,
                     ty: rhs_type,
                     constraint: cid,
-                    span: *span,
+                    span: span.clone(),
                 };
                 let id = self.arena.bind_new_id_to(e);
                 Ok(t::ExprId::Application(id))
@@ -446,7 +447,7 @@ impl Context {
                 }
                 let e = t::TupleExpr {
                     elems: typed_elems,
-                    span: *span,
+                    span: span.clone(),
                     ty: t::TupleType { elems: elem_types }.to_type().en(self),
                 };
                 let id = self.arena.bind_new_id_to(e);

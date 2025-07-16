@@ -11,6 +11,7 @@ sight-macros = { path = "sight-macros" }
 function_name = "0.3.0"
 tracing = "0.1.41"
 tracing-subscriber = "0.3"
+peg = "0.8"
 
 [build-dependencies]
 regex = "1.10"

@@ -2,8 +2,7 @@ pub mod display;
 pub mod id;
 pub mod typed;
 
-
-use crate::parser::exprs::Prec;
+use crate::{parser::exprs::Prec, span::Span, LiteralValue};
 use sight_macros::LiteralValue;
 use std::fmt::Debug;
 
@@ -72,42 +71,42 @@ pub enum Lit {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Expr {
     Unit {
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Int {
         value: i32,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Bool {
         value: bool,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     // a var reference
     Var {
         name: String,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     UnaryOp {
         op: UnaryOp,
         arg: Box<Self>,
-        span: (usize, usize),
-        op_span: (usize, usize),
+        span: Option<Span>,
+        op_span: Option<Span>,
     },
     BinaryOp {
         op: BinaryOp,
         lhs: Box<Self>,
         rhs: Box<Self>,
-        span: (usize, usize),
-        op_span: (usize, usize),
+        span: Option<Span>,
+        op_span: Option<Span>,
     },
     App {
         func: Box<Self>,
         arg: Box<Self>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Tuple {
         elems: Vec<Self>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Block(Box<Block>),
 }
@@ -121,7 +120,7 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 /// Stmts are what comprise of Blocks. A Stmt is not an Expr.
@@ -133,32 +132,32 @@ pub enum Stmt {
     Let {
         lhs: Pattern,
         rhs: Expr,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Func(Box<Func>),
     Block(Block),
     Expr {
         expr: Expr,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Empty {
-        span: (usize, usize),
+        span: Option<Span>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum Pattern {
     Unit {
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Var {
         name: String,
         ty: Option<TypeExpr>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Tuple {
         elems: Vec<Self>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
 }
 
@@ -168,28 +167,28 @@ pub struct Func {
     pub param: Pattern,
     pub ret_ty: TypeExpr,
     pub body: Block,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub enum TypeExpr {
     Unit {
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Bool {
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Int {
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Arrow {
         lhs: Box<TypeExpr>,
         rhs: Box<TypeExpr>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
     Tuple {
         elems: Vec<TypeExpr>,
-        span: (usize, usize),
+        span: Option<Span>,
     },
 }
 

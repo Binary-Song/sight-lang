@@ -1,4 +1,4 @@
-use crate::ast::typed::*;
+use crate::{ast::typed::*, span::Span};
 use sight_macros::LiteralValue;
 
 //
@@ -8,14 +8,14 @@ use sight_macros::LiteralValue;
 pub struct VariablePattern {
     pub binding_id: BindingId,
     pub ty: TypeId,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct TuplePattern {
     pub elems: Vec<PatternId>,
     pub ty: TypeId,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]

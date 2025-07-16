@@ -1,4 +1,4 @@
-use crate::{ast::typed::*, sema::inference::Constraint, utils::interning::InternString};
+use crate::{ast::typed::*, sema::inference::Constraint, span::Span, utils::interning::InternString};
 use sight_macros::LiteralValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -10,7 +10,7 @@ pub enum Literal {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct LiteralExpr {
     pub value: Literal,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
     pub ty: TypeId,
 }
 
@@ -19,7 +19,7 @@ pub struct VariableExpr {
     pub target: BindingId,
     pub name: InternString,
     pub ty: TypeId,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -28,7 +28,7 @@ pub struct ApplicationExpr {
     pub arg: ExprId,
     pub ty: TypeId,
     pub constraint: Id<Constraint>,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
@@ -39,7 +39,7 @@ pub struct BlockExpr {
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
 pub struct TupleExpr {
     pub elems: Vec<ExprId>,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
     pub ty: TypeId,
 }
 
@@ -47,7 +47,7 @@ pub struct TupleExpr {
 pub struct ProjectionExpr {
     pub target: ExprId,
     pub index: usize,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
     pub ty: TypeId,
 }
 
@@ -55,7 +55,7 @@ pub struct ProjectionExpr {
 pub struct Block {
     pub stmts: Vec<StmtId>,
     pub ty: TypeId,
-    pub span: (usize, usize),
+    pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]
