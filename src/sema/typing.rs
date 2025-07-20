@@ -1,20 +1,32 @@
 use super::inference::unify;
 use super::inference::Type as ConType;
 use super::inference::TypeIdMapper;
-use crate::ast as u;
+use crate::arena::v2::Arena;
+use crate::ast::raw as u;
 use crate::ast::id::Id;
-use crate::ast::typed::ArenaItem;
-use crate::ast::typed::GetArena;
+use crate::arena::ArenaItem;
+use crate::arena::GetArena;
+use crate::arena::Arena;
 use crate::ast::typed::{self as t, BindingData, FunctionType};
-use crate::ast::typed::{Arena, BindingId};
+use crate::ast::typed::{ BindingId};
 use crate::sema::inference::{Constraint, Solution};
-use crate::span::Span;
+use crate::ast::span::Span;
 use crate::utils::interning::GetInterner;
 use crate::utils::interning::Internable;
 use crate::utils::interning::{InternString, Interner, StaticInternable};
 use core::panic;
 use std::collections::VecDeque;
-use crate::context::Context;
+
+pub trait TypingContext: Interer
+{
+    fn get_next_type_var_mut(&mut self) -> &mut usize;
+
+    fn bump_fresh_type_var(&mut self) -> t::TypeId {
+        let index = *self.get_next_type_var_mut();
+        *self.get_next_type_var_mut() += 1;
+        t::UnknownType { index }.to_type().en(self)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeError {
@@ -33,13 +45,7 @@ pub enum TypeError {
 
 pub type TypeRes<T> = Result<T, TypeError>;
 
-impl Context {
-
-    fn bump_fresh_type_var(&mut self) -> t::TypeId {
-        let index = self.next_type_var;
-        self.next_type_var += 1;
-        t::VariableType { index }.to_type().en(self)
-    }
+impl TypingContext {
 
     fn derive_binding(&mut self, binding_head: BindingId, data: BindingData) -> BindingId {
         let binding = binding_head.derive(data);
@@ -142,7 +148,6 @@ impl Context {
         match pattern {
             u::Pattern::Var {
                 name: name,
-                ty,
                 span: span,
             } => {
                 let name = InternString::from_str(&name.as_str());
@@ -473,7 +478,7 @@ impl Context {
     pub fn to_solved_type(&self, ty: t::TypeId, sln: &Solution) -> t::Type {
         let ty = ty.de(self);
         match ty {
-            t::Type::Variable(t::VariableType { index: var }) => match sln.slns.get(&var) {
+            t::Type::Unknown(t::UnknownType { index: var }) => match sln.slns.get(&var) {
                 Some(tid) => tid.de(self),
                 None => panic!("Type variable {} not found in solution", var),
             },
@@ -537,7 +542,7 @@ impl TypeIdMapper for Context {
                     children: elems,
                 }
             }
-            t::Type::Variable(t::VariableType { index }) => ConType::TypeVar(index),
+            t::Type::Unknown(t::UnknownType { index }) => ConType::TypeVar(index),
         }
     }
 
@@ -566,7 +571,7 @@ impl TypeIdMapper for Context {
                     _ => panic!("Tag kind should be non-leaf, got {:?}", tag_kind),
                 }
             }
-            ConType::TypeVar(index) => t::VariableType { index }.to_type().en(self),
+            ConType::TypeVar(index) => t::UnknownType { index }.to_type().en(self),
         }
     }
 }

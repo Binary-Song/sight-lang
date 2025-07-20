@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use proc_macro::TokenStream;
+use proc_macro2;
 use quote::quote;
-use syn;
- 
+use syn::{self, parse::Parse, parse_macro_input};
+
 #[proc_macro_derive(LiteralValue)]
 pub fn derive_literal_value(input: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
@@ -53,7 +56,8 @@ pub fn derive_literal_value(input: TokenStream) -> TokenStream {
                 let variant_name = &variant.ident;
                 match &variant.fields {
                     syn::Fields::Named(fields_named) => {
-                        let field_names = fields_named.named.iter().map(|f| f.ident.as_ref().unwrap());
+                        let field_names =
+                            fields_named.named.iter().map(|f| f.ident.as_ref().unwrap());
                         let field_idents: Vec<syn::Ident> = field_names
                             .clone()
                             .map(|ident| syn::Ident::new(&ident.to_string(), ident.span()))
@@ -176,11 +180,40 @@ pub fn derive_static_internable(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Internable)]
-pub fn derive_internable(input: TokenStream) -> TokenStream  {
+pub fn derive_internable(input: TokenStream) -> TokenStream {
     let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
     let name = &ast.ident;
     let gen = quote! {
         impl crate::utils::interning::Internable for #name {}
     };
     gen.into()
+}
+
+struct UserArgs {
+    container_name: syn::Ident,
+    bucket_path: syn::Path,
+    types: Vec<syn::Type>,
+}
+
+impl Parse for UserArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let container_name = input.parse::<syn::Ident>()?;
+        let bucket_path = input.parse::<syn::Path>()?;
+        let _comma = input.parse::<syn::Token![,]>()?;
+        let mut types = Vec::new();
+        while !input.is_empty() {
+            let input_type = input.parse::<syn::Type>()?;
+            types.push(input_type);
+            if input.peek(syn::Token![,]) {
+                input.parse::<syn::Token![,]>()?;
+            } else {
+                break;
+            }
+        }
+        Ok(UserArgs {
+            container_name,
+            bucket_path,
+            types: types,
+        })
+    }
 }

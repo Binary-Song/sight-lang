@@ -1,55 +1,43 @@
-use crate::{ast::typed::*, sema::inference::Constraint};
+use crate::container::*;
 use sight_macros::LiteralValue;
-use crate::span::Span;
+use crate::ast::span::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct LetStmt {
+pub struct LetStmt<'a, A: Arena<Self>> {
     pub lhs: PatternId,
     pub rhs: ExprId,
-    pub constraint: Id<Constraint>,
     pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct FunctionStmt {
+pub struct FunctionStmt<'a, A: Arena<Self>> {
     pub new_fn_id: BindingId,
     pub param: PatternId,
     pub ret_ty: TypeId,
-    pub body: Id<Block>,
+    pub body: Id<Block<'a, A>>,
     pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct EmptyStmt {
+pub struct EmptyStmt<'a, A: Arena<Self>> {
     pub span: Option<Span>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]
-pub enum StmtId {
-    Let(Id<LetStmt>),
-    Function(Id<FunctionStmt>),
-    Block(Id<Block>),
+pub enum StmtId<'a, A: Arena<Self>> {
+    Let(Id<LetStmt<'a, A>>),
+    Function(Id<FunctionStmt<'a, A>>),
+    Block(Id<Block<'a, A>>),
     Expr(ExprId),
-    Empty(Id<EmptyStmt>),
+    Empty(Id<EmptyStmt<'a, A>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum Stmt {
-    Let(LetStmt),
-    Function(FunctionStmt),
-    Block(Block),
+pub enum Stmt<'a, A: Arena<Self>> {
+    Let(LetStmt<'a, A>),
+    Function(FunctionStmt<'a, A>),
+    Block(Block<'a, A>),
     Expr(ExprId),
-    Empty(EmptyStmt),
+    Empty(EmptyStmt<'a, A>),
 }
 
-impl StmtId {
-    pub fn de(self, arena: &impl GetArena) -> Stmt {
-        match self {
-            StmtId::Let(id) => Stmt::Let(id.de(arena)),
-            StmtId::Function(id) => Stmt::Function(id.de(arena)),
-            StmtId::Block(id) => Stmt::Block(id.de(arena)),
-            StmtId::Expr(expr_id) => Stmt::Expr(expr_id),
-            StmtId::Empty(id) => Stmt::Empty(id.de(arena)),
-        }
-    }
-}

@@ -1,362 +1,359 @@
-use crate::ast::*;
-use crate::lexer::Lexer;
-use crate::lexer::Token;
-use crate::lexer::TokenType;
-use std::fmt::Debug;
-use std::vec;
-pub mod context;
-pub mod exprs;
-mod name_stack;
-pub mod patterns;
-pub mod stmts;
-pub mod type_exprs;
+use crate::ast::raw::{
+    BasicType, Block, Expr, Func, HasTupleSyntax, Lit, Param, Pattern, Stmt, TypeExpr,
+};
+use crate::ast::span::*;
+use crate::container::Container;
+use crate::container::Id;
+use std::sync::Mutex;
+use std::cell::RefCell;
+use std::rc::Rc;
 
-#[cfg(test)]
-mod testing;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Trial {
-    SpecificTokenType {
-        token_type: TokenType,
-        rule_name: &'static str,
-    },
-    PeekerFunction {
-        description: &'static str,
-        rule_name: &'static str,
-    },
+fn binary_op<C: Container>(
+    ctx: Rc<RefCell<C>>,
+    op: &str,
+    op_span: Span,
+    mut lhs: Expr<C>,
+    mut rhs: Expr<C>,
+) -> Expr<C> {
+    let span = lhs.join_spans(&mut rhs);
+    Expr::App {
+        func: Box::new(Expr::Var {
+            name: ctx.borrow_mut().encode_f(op.to_string()),
+            span: Some(op_span),
+        }),
+        args: vec![lhs, rhs],
+        span: span,
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseErr {
-    UnexpectedToken { got: Token },
-    UnexpectedTokens { got: Vec<Token> },
-}
-
-#[derive(Default)]
-pub struct PropertyStack<T> {
-    rest: Vec<T>,
-    bottom: T,
-}
-#[macro_export]
-macro_rules! guarded_push {
-    ($stack:expr, $value:expr, $body:block) => {{
-        $stack.push($value);
-        let result = (|| $body)();
-        $stack.pop();
-        result
-    }};
-}
-
-impl<T: Clone> PropertyStack<T> {
-    pub fn new(init: T) -> Self {
-        PropertyStack {
-            rest: vec![],
-            bottom: init,
+fn join_into_tuple<C: Container, T: GetSpanRef + HasTupleSyntax>(
+    ctx: Rc<RefCell<C>>,
+    mut lhs: T,
+    mut rhs: T,
+) -> T {
+    let span = lhs.join_spans(&rhs);
+    match (lhs.break_tuple(), rhs.break_tuple()) {
+        (Ok(mut l_elems), Ok(r_elems)) => {
+            l_elems.extend(r_elems);
+            T::make_tuple(l_elems, span)
         }
-    }
-
-    pub fn push(&mut self, value: T) {
-        self.rest.push(value);
-    }
-
-    pub fn pop(&mut self) {
-        if self.rest.is_empty() {
-            panic!("Logic error: PropertyStack cannot be popped when empty. Push/pop imbalance is a serious bug!");
+        (Ok(mut elems), Err(rhs)) => {
+            elems.push(rhs);
+            T::make_tuple(elems, span)
         }
-        self.rest.pop();
-    }
-
-    pub fn value(&self) -> T {
-        self.rest
-            .last()
-            .map(|x| x.clone())
-            .unwrap_or(self.bottom.clone())
-    }
-
-    pub fn set(&mut self, value: T) {
-        if self.rest.is_empty() {
-            self.bottom = value
-        } else {
-            self.rest.pop();
-            self.rest.push(value);
+        (Err(lhs), Ok(mut elems)) => {
+            elems.insert(0, lhs);
+            T::make_tuple(elems, span)
         }
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        std::iter::once(&self.bottom).chain(self.rest.iter())
+        (Err(lhs), Err(rhs)) => T::make_tuple(vec![lhs, rhs], span),
     }
 }
 
-impl<T> Drop for PropertyStack<T> {
-    fn drop(&mut self) {
-        if !self.rest.is_empty() {
-            panic!(
-                "Logic error: PropertyStack should be empty on drop. Push/pop imbalance is a serious bug!"
-            );
-        }
-    }
-}
+peg::parser! {
+    pub grammar sight() for str {
 
-pub struct Parser<'a> {
-    pub lexer: Lexer<'a>,
-    trials: Vec<Trial>,
-    optional_type_anno_in_patterns: PropertyStack<bool>,
-    block_count: PropertyStack<usize>,
-}
+        /// Optional whitespace
+        rule _ = __ *
 
-pub enum PeekerResult {
-    /// Stop peeking and consume all previously peeked tokens.
-    Success,
-    /// Stop peeking and do not consume any previously peeked tokens.
-    Fail,
-    /// Continue peeking the next token.
-    Continue,
-}
+        /// Required whitespace
+        rule __ = [' ' | '\t' | '\n' | '\r']
 
-impl<'a> Debug for Parser<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.lexer.input[self.lexer.pos..])
-    }
-}
+        /// Brackets that enclose content.
+        /// Allows leading and trailing spaces.
+        rule generic_brackets<T>(
+            lb: rule<()>,
+            rb: rule<()>,
+            content: rule<T>
+        ) -> T =
+            lb() _ c:content() _ rb() { c }
 
-impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
-        Parser {
-            lexer: Lexer::new(input),
-            //allow_block_stack: vec![true],
-            trials: vec![],
-            optional_type_anno_in_patterns: PropertyStack::new(false),
-            block_count: PropertyStack::new(0),
-        }
-    }
-
-    // fn push_allow_blocks(&mut self, value: bool) {
-    //     self.allow_block_stack.push(value);
-    // }
-
-    // fn pop_allow_blocks(&mut self) {
-    //     self.allow_block_stack.pop();
-    // }
-
-    // fn allow_blocks(&self) -> bool {
-    //     *self
-    //         .allow_block_stack
-    //         .last()
-    //         .expect("Logic error: allow_blocks stack should not be empty")
-    // }
-
-    pub fn peek(&mut self) -> Token {
-        return self.lexer.peek_token();
-    }
-
-    pub fn consume(&mut self) -> Token {
-        return self.lexer.next_token();
-    }
-
-    pub fn expect_any_with_peeker(
-        &mut self,
-        peeker: &mut impl FnMut(&Token) -> PeekerResult,
-        description: &'static str,
-        rule: &'static str,
-    ) -> Result<Vec<Token>, ParseErr> {
-        let fn_extend_trials = |parser: &mut Self| {
-            parser.trials.push(Trial::PeekerFunction {
-                description,
-                rule_name: rule,
-            })
-        };
-        let fn_clear_trials = |parser: &mut Self| {
-            parser.trials.clear();
-        };
-        // start peeking
-        let saved_pos = self.lexer.pos;
-        let mut tokens = vec![];
-        let consume: bool = loop {
-            let token = self.lexer.next_token();
-            tokens.push(token.clone());
-            let peeker_result: PeekerResult = peeker(&token);
-            match peeker_result {
-                PeekerResult::Success => {
-                    break true;
-                }
-                PeekerResult::Continue => (),
-                PeekerResult::Fail => {
-                    break false;
+        /// Parentheses that enclose content of trait HasTupleSyntax.
+        /// Converts tuples in the content into closed tuples.
+        rule paren< T: HasTupleSyntax>(
+            content: rule<T>
+        ) -> T =
+            lpos:position!() p:generic_brackets(<"(">, <")">, content) rpos:position!() {
+                match p.break_tuple() {
+                    Ok(elems) => T::make_closed_tuple(elems, Some(Span(lpos, rpos))),
+                    Err(not_tuple) => not_tuple
                 }
             }
-        };
-        if consume {
-            fn_clear_trials(self);
-            return Ok(tokens);
-        } else {
-            self.lexer.pos = saved_pos;
-            fn_extend_trials(self);
-            return Err(ParseErr::UnexpectedTokens { got: tokens });
-        }
-    }
 
-    pub fn expect_any(
-        &mut self,
-        token_types: &[TokenType],
-        rule: &'static str,
-    ) -> Result<Token, ParseErr> {
-        let fn_extend_trials = |parser: &mut Self| {
-            parser.trials.extend(
-                token_types
-                    .iter()
-                    .map(|tt| Trial::SpecificTokenType {
-                        token_type: tt.clone(),
-                        rule_name: rule,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        };
-        let fn_clear_trials = |parser: &mut Self| {
-            parser.trials.clear();
-        };
-        let token = self.lexer.peek_token();
-        if token_types.contains(&token.token_type()) {
-            self.lexer.next_token();
-            fn_clear_trials(self);
-            return Ok(token);
-        } else {
-            fn_extend_trials(self);
-            return Err(ParseErr::UnexpectedToken { got: token });
-        }
-    }
-
-    pub fn expect(&mut self, token_type: TokenType, rule: &'static str) -> Result<Token, ParseErr> {
-        self.expect_any(&[token_type], rule)
-    }
-
-    pub fn left_assoc_infix_op<TRes>(
-        &mut self,
-        op_token_types: &[TokenType],
-        rule: &'static str,
-        parse_operand: &impl Fn(&mut Self) -> Result<TRes, ParseErr>,
-        combine_operands: &impl Fn(TRes, TRes, Token) -> TRes,
-    ) -> Result<TRes, ParseErr> {
-        let mut lhs = parse_operand(self)?;
-        loop {
-            if let Ok(op_token) = self.expect_any(op_token_types, rule) {
-                let rhs = parse_operand(self)?;
-                lhs = combine_operands(lhs, rhs, op_token);
-            } else {
-                break;
+        /// Parentheses that enclose content.
+        rule paren_raw<T>(
+            content: rule<T>
+        ) -> T =
+            p:generic_brackets(<"(">, <")">, content) {
+                p
             }
-        }
-        Ok(lhs)
-    }
 
-    pub fn right_assoc_infix_op<TRes>(
-        &mut self,
-        op_token_types: &[TokenType],
-        rule: &'static str,
-        parse_operand: &impl Fn(&mut Self) -> Result<TRes, ParseErr>,
-        combine_operands: &impl Fn(TRes, TRes, Token) -> TRes,
-    ) -> Result<TRes, ParseErr> {
-        let lhs = parse_operand(self)?;
-        if let Ok(op_token) = self.expect_any(op_token_types, rule) {
-            let rhs =
-                self.right_assoc_infix_op(op_token_types, rule, parse_operand, combine_operands)?;
-            Ok(combine_operands(lhs, rhs, op_token))
-        } else {
-            Ok(lhs)
-        }
-    }
+        /// Braces that enclose content.
+        rule braced< T>(
+            content: rule<T>
+        ) -> T =
+            generic_brackets(<"{">, <"}">, content)
 
-    pub fn variadic_op<T>(
-        &mut self,
-        op_token_type: TokenType,
-        rule: &'static str,
-        parse_operand: impl Fn(&mut Self) -> Result<T, ParseErr>,
-        combine_operands: impl Fn(Vec<T>) -> T,
-    ) -> Result<T, ParseErr> {
-        let mut operands = vec![];
-        operands.push(parse_operand(self)?);
-        loop {
-            if let Ok(_) = self.expect(op_token_type.clone(), rule) {
-                operands.push(parse_operand(self)?);
-            } else {
-                break;
+        /// A comma-separated list.
+        rule comma_list< T>(
+            content: rule<T>
+        ) -> Vec<T> =
+            lpos:position!() c:content() ** (_ "," _) rpos:position!() {
+                c
             }
-        }
-        if operands.len() == 1 {
-            return Ok(operands.remove(0));
-        }
-        Ok(combine_operands(operands))
-    }
 
-    pub fn paren<TRes>(
-        &mut self,
-        rule: &'static str,
-        parse_operand: &impl Fn(&mut Self) -> Result<TRes, ParseErr>,
-    ) -> Result<TRes, ParseErr> {
-        let _left_paren: Token = self.expect(TokenType::LParen, rule)?;
-        let res = parse_operand(self)?;
-        let _right_paren = self.expect(TokenType::RParen, rule)?;
-        Ok(res)
-    }
+        /// A name.
+        rule name<C: Container,>(ctx: Rc<RefCell<C>>) -> Id<String> =
+            n:$(quiet!{[c if c.is_alphabetic()][c if c.is_alphanumeric()]*}
+            / expected!("name")) {
+                ctx.clone().borrow_mut().encode_f(n.to_string())
+            }
 
-    pub fn ll1_try_parse<T>(
-        &mut self,
-        parse_fns: &[&dyn Fn(&mut Self) -> Result<T, ParseErr>],
-    ) -> Result<T, ParseErr> {
-        let saved_lexer_pos = self.lexer.pos;
-        for parse_fn in parse_fns {
-            match parse_fn(self) {
-                Ok(res) => return Ok(res),
-                // If the position did not change, it means we simply 'peeked' the next token
-                // and decided this won't work. This is called a 'shallow failure'.
-                // In this case, we should try the next parse function.
-                //
-                // If the position did change, it means we had chosen this parse function
-                // and went forward just to find out there was a failure. For example, we
-                // see "(" and say we want to choose the "(" expr ")" rule, just to find out
-                // there was no ")" after that. This is called a 'deep failure'.
-                // In this case, we should propagate the error
-                // instead of trying the next parse function.
-                Err(err) => {
-                    if self.lexer.pos != saved_lexer_pos {
-                        return Err(err);
-                    }
+        rule unit_lit<C: Container,>(ctx: Rc<RefCell<C>>) -> () =
+            lpos:position!() paren_raw(<_()>) rpos:position!() {
+            }
+
+        rule int_lit<C: Container,>(ctx: Rc<RefCell<C>>) -> i32 =
+            n:$(quiet!{['0'..='9']+}/expected!("integer literal")) {
+                n.parse().unwrap()
+            }
+
+        rule bool_lit<C: Container,>(ctx: Rc<RefCell<C>>) -> bool =
+            "true" { true }
+            / "false" { false }
+
+        /// A literal value can be used as an expression or a pattern.
+        rule literal<C: Container,>(ctx: Rc<RefCell<C>>) -> Lit<C> =
+            unit_lit(ctx.clone()) { Lit::Unit }
+            / v:bool_lit(ctx.clone()) { Lit::Bool(v) }
+            / v:int_lit(ctx.clone()) { Lit::Int(v) }
+
+        /// A basic type that does not have structure.
+        rule basic_type<C: Container,>(ctx: Rc<RefCell<C>>) -> BasicType<C> =
+            unit_lit(ctx.clone()) { BasicType::Unit }
+            / "bool" { BasicType::Bool }
+            / "int" { BasicType::Int }
+
+        rule literal_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+            l:position!() value:literal(ctx.clone()) r:position!() {
+                Expr::Lit {
+                    value: value,
+                    span: Some(Span(l, r)),
                 }
             }
+
+        rule literal_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern<C> =
+            l:position!() value:literal(ctx.clone()) r:position!() {
+                Pattern::Lit {
+                    value: value,
+                    span: Some(Span(l, r)),
+                }
+            }
+
+        rule basic_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+            l:position!() value:basic_type(ctx.clone()) r:position!() {
+                TypeExpr::Basic {
+                    t: value,
+                    span: Some(Span(l, r)),
+                }
+            }
+
+        rule var_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+            l:position!() var: name(ctx.clone()) r:position!() {
+                Expr::Var {
+                    name: var,
+                    span: Some(Span(l, r)),
+                }
+            }
+
+        rule var_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern<C> =
+            l:position!() var: name(ctx.clone()) r:position!() {
+                Pattern::Var {
+                    name: var,
+                    span: Some(Span(l, r)),
+                }
+            }
+
+        rule var_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+            l:position!() var: name(ctx.clone()) r:position!() {
+                TypeExpr::Var {
+                    name: var,
+                    span: Some(Span(l, r)),
+                }
+            }
+
+        rule type_annotation<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+            ":" _ ty:type_expr(ctx.clone()) {
+                ty
+            }
+
+        rule param<C: Container,>(ctx: Rc<RefCell<C>>) -> Param<C> =
+            lpos:position!() name:name(ctx.clone()) _ ty:type_annotation(ctx.clone())? rpos:position!() {
+                Param {
+                    name,
+                    ty: ty,
+                    span: Some(Span(lpos, rpos)),
+                }
+            }
+
+        rule param_list<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Param<C>>, Span) =
+            lpos:position!() params:comma_list( <param(ctx.clone())>) rpos:position!() {
+                (params, Span(lpos, rpos))
+            }
+
+        rule param_list_with_paren<C: Container>(ctx: Rc<RefCell<C>>) -> (Vec<Param<C>>, Span) =
+            params:paren_raw(  <param_list(ctx.clone())>) {
+                params
+            }
+
+        pub rule expr<C: Container>(ctx: Rc<RefCell<C>>) -> Expr<C> = precedence!{
+            // lambda with 1 param: 
+            // x => body
+            lhs:param(ctx.clone()) _ "=>" _ rhs:(@) {
+                let lhs_span = lhs.span.clone().unwrap();
+                Expr::Lambda {
+                    span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
+                    params: vec![lhs],
+                    body: Box::new(rhs),
+                }
+            }
+            // lambda with 2+ params:
+            // e.g. (x, y: int) => body
+            lhs:param_list_with_paren(ctx.clone()) _ "=>" _ rhs:(@) {
+                let (lhs, lhs_span) = lhs;
+                Expr::Lambda {
+                    span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
+                    params: lhs,
+                    body: Box::new(rhs),
+                }
+            }
+            --
+            // tuple
+            lhs:(@) _ op:$(",") _ rhs:@ {
+                join_into_tuple(ctx.clone(), lhs, rhs)
+            }
+            --
+            // plus/minus
+            lhs:(@) _ op_lpos: position!() op:$("+" / "-") op_rpos: position!() _ rhs:@ {
+                binary_op(ctx.clone(), op, Span(op_lpos, op_rpos), lhs, rhs)
+            }
+            --
+            // mul/div
+            lhs:(@) _ op_lpos: position!() op:$("*" / "/") op_rpos: position!() _ rhs:@ {
+                binary_op(ctx.clone(), op, Span(op_lpos, op_rpos), lhs, rhs)
+            }
+            --
+            // application
+            lhs:(@) _ rhs:@ {
+                let span = lhs.join_spans(&rhs);
+                Expr::App {
+                    func: Box::new(lhs),
+                    args: vec![rhs],
+                    span: span,
+                }
+            }
+            --
+            e: paren(  <expr(ctx.clone())>) { e }
+            e: block_expr(ctx.clone()) { e }
+            e: literal_expr(ctx.clone()) { e }
+            e: var_expr(ctx.clone()) { e }
         }
-        Err(ParseErr::UnexpectedToken {
-            got: self.lexer.peek_token(),
-        })
+
+        pub rule pattern<C: Container>(ctx: Rc<RefCell<C>>) -> Pattern<C> = precedence!{
+            // tuple
+            lhs:(@) _ op:$(",") _ rhs:@ {
+                join_into_tuple(ctx.clone(), lhs, rhs)
+            }
+            --
+            e: paren(  <pattern(ctx.clone())>) { e }
+            e: literal_pattern(ctx.clone()) { e }
+            e: var_pattern(ctx.clone()) { e }
+        }
+
+        rule let_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+            "let" __ lhs:pattern(ctx.clone()) _ "=" _ rhs:expr(ctx.clone()) _ ";" {
+                Stmt::Let {
+                    lhs,
+                    rhs,
+                }
+            }
+
+        rule func_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+            "fun" __
+            lpos:position!() name:name(ctx.clone()) rpos:position!() _
+            params:param_list_with_paren(ctx.clone()) _
+            ret_ty: type_annotation(ctx.clone()) _
+            body:block(ctx.clone()) {
+                Stmt::Func {
+                    func: Box::new(Func {
+                        name,
+                        params: params.0,
+                        ret_ty,
+                        body,
+                        name_span: Some(Span(lpos, rpos)),
+                    }),
+                }
+            }
+
+        rule expr_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+            e:expr(ctx.clone()) _ ";" {
+                Stmt::Expr {
+                    expr: e,
+                }
+            }
+
+        pub rule stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+            s: (
+                let_stmt(ctx.clone())
+                / func_stmt(ctx.clone())
+                / expr_stmt(ctx.clone())
+            ) { s }
+
+        rule block_content<C: Container>(ctx: Rc<RefCell<C>>) -> (Vec<Stmt<C>>, Option<Expr<C>>) =
+            stmts: stmt(ctx.clone())**_ _ value: expr(ctx.clone())? {
+                (stmts, value)
+            }
+
+        pub rule block<C: Container>(ctx: Rc<RefCell<C>>) -> Block<C> =
+            lpos: position!() c:braced(<block_content(ctx.clone())>) rpos: position!() {
+                let (stmts, value) = c;
+                Block {
+                    stmts,
+                    value,
+                    span: Some(Span(lpos, rpos)),
+                }
+            }
+
+        rule block_expr<C: Container>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+            b:block(ctx.clone()) {
+                Expr::Block(Box::new(b))
+            }
+
+        pub rule type_expr<C: Container>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> = precedence!{
+            // the magic rule
+            lpos:position!() e:@ rpos:position!() {
+                let mut e: TypeExpr<C> = e;
+                *e.get_span_mut() = Some(Span(lpos, rpos));
+                e
+            }
+            --
+            // tuple
+            lhs:(@) _ op:$(",") _ rhs:@ {
+                join_into_tuple(ctx.clone(), lhs, rhs)
+            }
+            --
+            // arrow
+            lhs:@ _ op:$("->") _ rhs:(@) {
+                TypeExpr::Arrow {
+                    span: lhs.join_spans(&rhs),
+                    lhs: Box::new(lhs),
+                    rhs: Box::new(rhs),
+                }
+            }
+            --
+            e: paren( <type_expr(ctx.clone())>) { e }
+            e: basic_type_expr(ctx.clone()) { e }
+            e: var_type_expr(ctx.clone()) { e }
+        }
     }
-
-    // fn parse_fn_param_pattern_tuple_operator(&mut self) -> Result<Expr, ParseErr> {
-    //     self.parse_left_assoc_binary_op(
-    //         TokenType::Comma,
-    //         Rule::FnParamPattern,
-    //         |p| p.parse_fn_param(),
-    //         |lhs, rhs, _op_token| Expr::Tuple {
-    //             elems: vec![lhs, rhs],
-    //             span: (lhs.span().0, rhs.span().1),
-    //         },
-    //     );
-    //     let name = self.expect(TokenType::Ident, Rule::FnParamPattern)?;
-    // }
-
-    // fn parse_fn_param_pattern(&mut self) -> Result<Expr, ParseErr> {}
-
-    // // annotated fn decl:
-    // // MUST BE FULLY ANNOTATED
-    // //
-    // // fn is_even(n : int) -> bool  { n % 2 == 0 }
-    // // fn is_greater_than(a: int, b: int) -> bool { a > b }
-    // // fn funny(a: int, (b: int, c: int)) -> int ...
-    // // --
-    // // lambda expression:
-    // //
-    // // a => a + 1
-    // // a: int => a + 1
-    // //
-    // fn parse_fn_expr(&mut self) -> Result<Expr, ParseErr> {
-    //     let fn_kw = self.expect(TokenType::Fn, Rule::FnExpr)?;
-    //     let fn_name = self.expect(TokenType::Ident, Rule::FnExpr)?;
-    // }
 }
+ 
