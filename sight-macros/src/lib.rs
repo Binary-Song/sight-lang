@@ -188,32 +188,3 @@ pub fn derive_internable(input: TokenStream) -> TokenStream {
     };
     gen.into()
 }
-
-struct UserArgs {
-    container_name: syn::Ident,
-    bucket_path: syn::Path,
-    types: Vec<syn::Type>,
-}
-
-impl Parse for UserArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let container_name = input.parse::<syn::Ident>()?;
-        let bucket_path = input.parse::<syn::Path>()?;
-        let _comma = input.parse::<syn::Token![,]>()?;
-        let mut types = Vec::new();
-        while !input.is_empty() {
-            let input_type = input.parse::<syn::Type>()?;
-            types.push(input_type);
-            if input.peek(syn::Token![,]) {
-                input.parse::<syn::Token![,]>()?;
-            } else {
-                break;
-            }
-        }
-        Ok(UserArgs {
-            container_name,
-            bucket_path,
-            types: types,
-        })
-    }
-}

@@ -1,2 +1,9 @@
+*
+!*.rs
+!*.gitignore
+!*.gitmodules
+!Cargo.toml
+!Cargo.lock
+!*.md
+
 /target
-*.xml
