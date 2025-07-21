@@ -2,13 +2,13 @@ use crate::container::Arena;
 use crate::container::Container;
 use crate::{
     container::{EncodeError, Interner},
-    multicontainer,
+    sum_container,
 };
 
 #[test]
 fn simple_test() {
     let f1 = || -> Option<()> {
-        let mut arena = multicontainer!(
+        let mut arena = sum_container!(
             Arena::<i32>::default(),
             Arena::<u32>::default(),
             Arena::<bool>::default(),
@@ -33,7 +33,7 @@ fn simple_test() {
 #[test]
 fn bad_type() {
     let mut arena = Arena::<i32>::default();
-    match arena.encode_extra("") {
+    match arena.encode_ex("") {
         Err(EncodeError::UnsupportedType(t)) => {
             // ok, expected
         }

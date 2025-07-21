@@ -1,43 +1,35 @@
-use crate::container::*;
-use sight_macros::LiteralValue;
 use crate::ast::span::*;
+use crate::{
+    ast::typed::{
+        binding::Binding,
+        expr::{Block, ExprSumId},
+        pattern::PatternSumId,
+        r#type::Type,
+    },
+    container::*,
+    sum_id,
+};
+use sight_macros::LiteralValue;
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct LetStmt<'a, A: Arena<Self>> {
-    pub lhs: PatternId,
-    pub rhs: ExprId,
+pub type StmtSumId = sum_id!(LetStmt, FunctionStmt, EmptyStmt);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+pub struct LetStmt {
+    pub lhs: PatternSumId,
+    pub rhs: ExprSumId,
     pub span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct FunctionStmt<'a, A: Arena<Self>> {
-    pub new_fn_id: BindingId,
-    pub param: PatternId,
-    pub ret_ty: TypeId,
-    pub body: Id<Block<'a, A>>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+pub struct FunctionStmt {
+    pub new_fn_id: Id<Binding>,
+    pub param: PatternSumId,
+    pub ret_ty: Id<Type>,
+    pub body: Id<Block>,
     pub span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub struct EmptyStmt<'a, A: Arena<Self>> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+pub struct EmptyStmt {
     pub span: Option<Span>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue)]
-pub enum StmtId<'a, A: Arena<Self>> {
-    Let(Id<LetStmt<'a, A>>),
-    Function(Id<FunctionStmt<'a, A>>),
-    Block(Id<Block<'a, A>>),
-    Expr(ExprId),
-    Empty(Id<EmptyStmt<'a, A>>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue)]
-pub enum Stmt<'a, A: Arena<Self>> {
-    Let(LetStmt<'a, A>),
-    Function(FunctionStmt<'a, A>),
-    Block(Block<'a, A>),
-    Expr(ExprId),
-    Empty(EmptyStmt<'a, A>),
-}
-

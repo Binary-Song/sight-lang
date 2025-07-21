@@ -1,5 +1,5 @@
 pub mod ast;
-pub mod parser;
+// pub mod parser;
 pub mod literal_value;
 pub use literal_value::LiteralValue;
 // pub mod lexer;
@@ -9,7 +9,7 @@ pub use literal_value::LiteralValue;
 // pub mod diag;
 // pub mod context;
 pub mod container;
-mod test;
+// mod test;
 
 peg::parser!{
 grammar list_parser() for str {

@@ -17,7 +17,7 @@ impl<T: Item> Default for Arena<T> {
 
 impl<T: Item> Container for Arena<T> {
     #[inline(always)]
-    fn decode_extra<I: Item>(&self, id: Id<I>) -> Result<I, DecodeError> {
+    fn decode_ex<I: Item>(&self, id: Id<I>) -> Result<I, DecodeError> {
         if TypeId::of::<T>() != TypeId::of::<I>() {
             return Err(DecodeError::UnsupportedType);
         }
@@ -33,7 +33,7 @@ impl<T: Item> Container for Arena<T> {
     }
 
     #[inline(always)]
-    fn encode_extra<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>> {
+    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>> {
         if TypeId::of::<T>() != TypeId::of::<I>() {
             return Err(EncodeError::UnsupportedType(item));
         }
@@ -44,7 +44,7 @@ impl<T: Item> Container for Arena<T> {
     }
 
     #[inline(always)]
-    fn rebind_extra<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>> {
+    fn rebind_ex<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>> {
         if TypeId::of::<T>() != TypeId::of::<I>() {
             return Err(RebindError::UnsupportedType(item));
         }

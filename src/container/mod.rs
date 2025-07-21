@@ -13,11 +13,12 @@
 //!
 mod arena;
 mod interner;
-mod multicontainer;
+mod sum;
 
 pub use arena::Arena;
 pub use interner::Interner;
-pub use multicontainer::DoubleContainer;
+pub use sum::SumContainer;
+pub use sum::SumId;
 
 use crate::LiteralValue;
 use core::fmt;
@@ -94,22 +95,22 @@ impl<T: Debug + Sized + Clone + Eq + Hash + 'static> Item for T {}
 pub trait Container: Sized + Debug {
     /// Decode the ID to get the pointed-to value.
     ///
-    /// `*_extra`: This function has more error info.
-    fn decode_extra<I: Item>(&self, id: Id<I>) -> Result<I, DecodeError>;
+    #[doc = include_str!("doc/_ex.md")]
+    fn decode_ex<I: Item>(&self, id: Id<I>) -> Result<I, DecodeError>;
     /// Encode the item to get an ID that points to it.
     ///
-    /// `*_extra`: This function has more error info.
-    fn encode_extra<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>>;
+    #[doc = include_str!("doc/_ex.md")]
+    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>>;
     /// Rebind an ID to a new value of the same type.
     ///
-    /// `*_extra`: This function has more error info.
+    #[doc = include_str!("doc/_ex.md")]
     #[must_use]
-    fn rebind_extra<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>>;
+    fn rebind_ex<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>>;
 
     /// Decode the ID to get the pointed-to value.
     #[inline(always)]
     fn decode<I: Item>(&self, id: Id<I>) -> Option<I> {
-        match self.decode_extra(id) {
+        match self.decode_ex(id) {
             Ok(item) => Some(item),
             Err(x) => None,
         }
@@ -118,7 +119,7 @@ pub trait Container: Sized + Debug {
     #[must_use]
     #[inline(always)]
     fn encode<I: Item>(&mut self, item: I) -> Option<Id<I>> {
-        match self.encode_extra(item) {
+        match self.encode_ex(item) {
             Ok(id) => Some(id),
             Err(_) => None,
         }
@@ -127,7 +128,7 @@ pub trait Container: Sized + Debug {
     #[must_use]
     #[inline(always)]
     fn rebind<I: Item>(&mut self, id: Id<I>, item: I) -> Option<()> {
-        match self.rebind_extra(id, item) {
+        match self.rebind_ex(id, item) {
             Ok(()) => Some(()),
             Err(_) => None,
         }
@@ -135,7 +136,7 @@ pub trait Container: Sized + Debug {
 
     /// Decode the ID to get the pointed-to value.
     ///
-    /// `*_f`: Panics if failed.
+    #[doc = include_str!("doc/_f.md")]
     #[inline(always)]
     fn decode_f<I: Item>(&self, id: Id<I>) -> I {
         self.decode(id)
@@ -143,8 +144,7 @@ pub trait Container: Sized + Debug {
     }
     /// Encode the item to get an ID that points to it.
     ///
-    /// `*_f`: Panics if failed.
-    #[must_use]
+    #[doc = include_str!("doc/_f.md")]
     #[inline(always)]
     fn encode_f<I: Item>(&mut self, item: I) -> Id<I> {
         self.encode(item)
@@ -152,8 +152,7 @@ pub trait Container: Sized + Debug {
     }
     /// Rebind an ID to a new value of the same type.
     ///
-    /// `*_f`: Panics if failed.
-    #[must_use]
+    #[doc = include_str!("doc/_f.md")]
     #[inline(always)]
     fn rebind_f<I: Item>(&mut self, id: Id<I>, item: I) {
         self.rebind(id, item)
@@ -172,9 +171,23 @@ pub trait Container: Sized + Debug {
 pub struct Id<I: Item>(pub(super) usize, pub(super) PhantomData<(I,)>);
 
 impl<I: Item> Id<I> {
-    /// Decode the Id to get the pointed-to value.
-    pub fn de<C: Container>(self, container: &C) -> Result<I, DecodeError> {
-        container.decode_extra(self)
+    /// Same as [`Container::decode_ex`]
+    ///
+    #[inline(always)]
+    pub fn decode_ex<C: Container>(self, container: &C) -> Result<I, DecodeError> {
+        container.decode_ex(self)
+    }
+    /// Same as [`Container::decode_f`]
+    ///
+    #[inline(always)]
+    pub fn decode_f<C: Container>(self, container: &C) -> I {
+        container.decode_f(self)
+    }
+    /// Same as [`Container::decode`]
+    ///
+    #[inline(always)]
+    pub fn decode<C: Container>(self, container: &C) -> Option<I> {
+        container.decode(self)
     }
 }
 

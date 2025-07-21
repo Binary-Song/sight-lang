@@ -2,65 +2,63 @@ use crate::container::*;
 use sight_macros::{Internable, LiteralValue};
 use std::hash::Hash;
 
-pub type TypeId<'a> = Id<'a, Type<'a, A>, A>;
-
 /// An enum over different kinds of type ids.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, )]
-pub enum Type<'a, A: Arena<Self>> {
-    Primitive(PrimitiveType<'a, A>),
-    Function(FunctionType<'a, A>),
-    Tuple(TupleType<'a, A>),
-    Unknown(UnknownType<'a, A>),
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+pub enum Type {
+    Primitive(PrimitiveType),
+    Function(FunctionType),
+    Tuple(TupleType),
+    Unknown(UnknownType),
 }
 
-impl<'a, A: Arena<Type<'a, A>>> Type<'a, A> {
-    pub fn unit() -> Type<'a, A> {
+impl Type {
+    pub fn unit() -> Type {
         Type::Tuple(TupleType { elems: vec![] })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
-pub enum PrimitiveType<'a, A: Arena<Self>> {
+pub enum PrimitiveType {
     Bool,
     Int,
 }
 
-impl<'a, A: Arena<PrimitiveType<'a, A>>> PrimitiveType<'a, A> {
-    pub fn to_type(self) -> Type<'a, A> {
+impl PrimitiveType {
+    pub fn to_type(self) -> Type {
         Type::Primitive(self)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
-pub struct FunctionType<'a, A: Arena<Self>> {
-    pub lhs: TypeId<'a, A>,
-    pub rhs: TypeId<'a, A>,
+pub struct FunctionType {
+    pub lhs: Id<Type>,
+    pub rhs: Id<Type>,
 }
 
-impl<'a, A: Arena<FunctionType<'a, A>>> FunctionType<'a, A> {
-    pub fn to_type(self) -> Type<'a, A> {
+impl FunctionType {
+    pub fn to_type(self) -> Type {
         Type::Function(self)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
-pub struct TupleType<'a, A: Arena<Self>> {
-    pub elems: Vec<TypeId<'a, A>>,
+pub struct TupleType {
+    pub elems: Vec<Id<Type>>,
 }
 
-impl<'a, A: Arena<TupleType<'a, A>>> TupleType<'a, A> {
-    pub fn to_type(self) -> Type<'a, A> {
+impl TupleType {
+    pub fn to_type(self) -> Type {
         Type::Tuple(self)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
-pub struct UnknownType<'a, A: Arena<Self>> {
+pub struct UnknownType {
     pub index: usize,
 }
 
-impl<'a, A: Arena<UnknownType<'a, A>>> UnknownType<'a, A> {
-    pub fn to_type(self) -> Type<'a, A> {
+impl UnknownType {
+    pub fn to_type(self) -> Type {
         Type::Unknown(self)
     }
 }

@@ -4,17 +4,17 @@ use crate::ast::raw::{
 use crate::ast::span::*;
 use crate::container::Container;
 use crate::container::Id;
-use std::sync::Mutex;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Mutex;
 
 fn binary_op<C: Container>(
     ctx: Rc<RefCell<C>>,
     op: &str,
     op_span: Span,
-    mut lhs: Expr<C>,
-    mut rhs: Expr<C>,
-) -> Expr<C> {
+    mut lhs: Expr,
+    mut rhs: Expr,
+) -> Expr {
     let span = lhs.join_spans(&mut rhs);
     Expr::App {
         func: Box::new(Expr::Var {
@@ -122,18 +122,18 @@ peg::parser! {
             / "false" { false }
 
         /// A literal value can be used as an expression or a pattern.
-        rule literal<C: Container,>(ctx: Rc<RefCell<C>>) -> Lit<C> =
+        rule literal<C: Container,>(ctx: Rc<RefCell<C>>) -> Lit =
             unit_lit(ctx.clone()) { Lit::Unit }
             / v:bool_lit(ctx.clone()) { Lit::Bool(v) }
             / v:int_lit(ctx.clone()) { Lit::Int(v) }
 
         /// A basic type that does not have structure.
-        rule basic_type<C: Container,>(ctx: Rc<RefCell<C>>) -> BasicType<C> =
+        rule basic_type<C: Container,>(ctx: Rc<RefCell<C>>) -> BasicType =
             unit_lit(ctx.clone()) { BasicType::Unit }
             / "bool" { BasicType::Bool }
             / "int" { BasicType::Int }
 
-        rule literal_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+        rule literal_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr =
             l:position!() value:literal(ctx.clone()) r:position!() {
                 Expr::Lit {
                     value: value,
@@ -141,7 +141,7 @@ peg::parser! {
                 }
             }
 
-        rule literal_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern<C> =
+        rule literal_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern =
             l:position!() value:literal(ctx.clone()) r:position!() {
                 Pattern::Lit {
                     value: value,
@@ -149,7 +149,7 @@ peg::parser! {
                 }
             }
 
-        rule basic_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+        rule basic_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr =
             l:position!() value:basic_type(ctx.clone()) r:position!() {
                 TypeExpr::Basic {
                     t: value,
@@ -157,7 +157,7 @@ peg::parser! {
                 }
             }
 
-        rule var_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+        rule var_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr =
             l:position!() var: name(ctx.clone()) r:position!() {
                 Expr::Var {
                     name: var,
@@ -165,7 +165,7 @@ peg::parser! {
                 }
             }
 
-        rule var_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern<C> =
+        rule var_pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern =
             l:position!() var: name(ctx.clone()) r:position!() {
                 Pattern::Var {
                     name: var,
@@ -173,7 +173,7 @@ peg::parser! {
                 }
             }
 
-        rule var_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+        rule var_type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr =
             l:position!() var: name(ctx.clone()) r:position!() {
                 TypeExpr::Var {
                     name: var,
@@ -181,12 +181,12 @@ peg::parser! {
                 }
             }
 
-        rule type_annotation<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> =
+        rule type_annotation<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr =
             ":" _ ty:type_expr(ctx.clone()) {
                 ty
             }
 
-        rule param<C: Container,>(ctx: Rc<RefCell<C>>) -> Param<C> =
+        rule param<C: Container,>(ctx: Rc<RefCell<C>>) -> Param =
             lpos:position!() name:name(ctx.clone()) _ ty:type_annotation(ctx.clone())? rpos:position!() {
                 Param {
                     name,
@@ -195,18 +195,18 @@ peg::parser! {
                 }
             }
 
-        rule param_list<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Param<C>>, Span) =
+        rule param_list<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Param>, Span) =
             lpos:position!() params:comma_list( <param(ctx.clone())>) rpos:position!() {
                 (params, Span(lpos, rpos))
             }
 
-        rule param_list_with_paren<C: Container>(ctx: Rc<RefCell<C>>) -> (Vec<Param<C>>, Span) =
+        rule param_list_with_paren<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Param>, Span) =
             params:paren_raw(  <param_list(ctx.clone())>) {
                 params
             }
 
-        pub rule expr<C: Container>(ctx: Rc<RefCell<C>>) -> Expr<C> = precedence!{
-            // lambda with 1 param: 
+        pub rule expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr = precedence!{
+            // lambda with 1 param:
             // x => body
             lhs:param(ctx.clone()) _ "=>" _ rhs:(@) {
                 let lhs_span = lhs.span.clone().unwrap();
@@ -258,7 +258,7 @@ peg::parser! {
             e: var_expr(ctx.clone()) { e }
         }
 
-        pub rule pattern<C: Container>(ctx: Rc<RefCell<C>>) -> Pattern<C> = precedence!{
+        pub rule pattern<C: Container,>(ctx: Rc<RefCell<C>>) -> Pattern = precedence!{
             // tuple
             lhs:(@) _ op:$(",") _ rhs:@ {
                 join_into_tuple(ctx.clone(), lhs, rhs)
@@ -269,7 +269,7 @@ peg::parser! {
             e: var_pattern(ctx.clone()) { e }
         }
 
-        rule let_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+        rule let_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             "let" __ lhs:pattern(ctx.clone()) _ "=" _ rhs:expr(ctx.clone()) _ ";" {
                 Stmt::Let {
                     lhs,
@@ -277,7 +277,7 @@ peg::parser! {
                 }
             }
 
-        rule func_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+        rule func_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             "fun" __
             lpos:position!() name:name(ctx.clone()) rpos:position!() _
             params:param_list_with_paren(ctx.clone()) _
@@ -294,26 +294,26 @@ peg::parser! {
                 }
             }
 
-        rule expr_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+        rule expr_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             e:expr(ctx.clone()) _ ";" {
                 Stmt::Expr {
                     expr: e,
                 }
             }
 
-        pub rule stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt<C> =
+        pub rule stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             s: (
                 let_stmt(ctx.clone())
                 / func_stmt(ctx.clone())
                 / expr_stmt(ctx.clone())
             ) { s }
 
-        rule block_content<C: Container>(ctx: Rc<RefCell<C>>) -> (Vec<Stmt<C>>, Option<Expr<C>>) =
+        rule block_content<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Stmt>, Option<Expr>) =
             stmts: stmt(ctx.clone())**_ _ value: expr(ctx.clone())? {
                 (stmts, value)
             }
 
-        pub rule block<C: Container>(ctx: Rc<RefCell<C>>) -> Block<C> =
+        pub rule block<C: Container,>(ctx: Rc<RefCell<C>>) -> Block =
             lpos: position!() c:braced(<block_content(ctx.clone())>) rpos: position!() {
                 let (stmts, value) = c;
                 Block {
@@ -323,15 +323,15 @@ peg::parser! {
                 }
             }
 
-        rule block_expr<C: Container>(ctx: Rc<RefCell<C>>) -> Expr<C> =
+        rule block_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr =
             b:block(ctx.clone()) {
                 Expr::Block(Box::new(b))
             }
 
-        pub rule type_expr<C: Container>(ctx: Rc<RefCell<C>>) -> TypeExpr<C> = precedence!{
+        pub rule type_expr<C: Container,>(ctx: Rc<RefCell<C>>) -> TypeExpr = precedence!{
             // the magic rule
             lpos:position!() e:@ rpos:position!() {
-                let mut e: TypeExpr<C> = e;
+                let mut e: TypeExpr = e;
                 *e.get_span_mut() = Some(Span(lpos, rpos));
                 e
             }
@@ -356,4 +356,3 @@ peg::parser! {
         }
     }
 }
- 

@@ -22,27 +22,24 @@ pub trait HasTupleSyntax {
         Self: Sized;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Lit<C: Container> {
-    PhantomData(PhantomData<C>),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Lit {
     Unit,
     Bool(bool),
     Int(i32),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BasicType<C: Container> {
-    PhantomData(PhantomData<C>),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BasicType {
     Unit,
     Bool,
     Int,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr<C: Container> {
-    PhantomData(PhantomData<C>),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Expr {
     Lit {
-        value: Lit<C>,
+        value: Lit,
         span: Option<Span>,
     },
     Var {
@@ -67,15 +64,15 @@ pub enum Expr<C: Container> {
         index: usize,
         span: Option<Span>,
     },
-    Block(Box<Block<C>>),
+    Block(Box<Block>),
     Lambda {
-        params: Vec<Param<C>>,
+        params: Vec<Param>,
         body: Box<Self>,
         span: Option<Span>,
     },
 }
 
-impl<C: Container> Expr<C> {
+impl Expr {
     pub fn unit(span: Option<Span>) -> Self {
         Expr::Tuple {
             elems: vec![],
@@ -84,10 +81,9 @@ impl<C: Container> Expr<C> {
     }
 }
 
-impl<C: Container> GetSpanRef for Expr<C> {
+impl GetSpanRef for Expr {
     fn get_span_ref(&self) -> &Option<Span> {
         match self {
-            Expr::PhantomData(_) => &None,
             Expr::Lit { span, .. }
             | Expr::Var { span, .. }
             | Expr::App { span, .. }
@@ -100,10 +96,9 @@ impl<C: Container> GetSpanRef for Expr<C> {
     }
 }
 
-impl<C: Container> GetSpanMut for Expr<C> {
+impl GetSpanMut for Expr {
     fn get_span_mut(&mut self) -> &mut Option<Span> {
         match self {
-            Expr::PhantomData(_) => todo!("PhantomData should not be used"),
             Expr::Lit { span, .. }
             | Expr::Var { span, .. }
             | Expr::App { span, .. }
@@ -116,7 +111,7 @@ impl<C: Container> GetSpanMut for Expr<C> {
     }
 }
 
-impl<C: Container> HasTupleSyntax for Expr<C> {
+impl HasTupleSyntax for Expr {
     fn break_tuple(self) -> Result<Vec<Self>, Self> {
         match self {
             Self::Tuple { elems, .. } => Ok(elems),
@@ -143,10 +138,10 @@ impl<C: Container> HasTupleSyntax for Expr<C> {
 /// If a Blocks ends in a non-Expr Stmt, a fake unit
 /// Expr will be inserted to the end of the Block which will
 /// function as the return value.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Block<C: Container> {
-    pub stmts: Vec<Stmt<C>>,
-    pub value: Option<Expr<C>>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
+    pub value: Option<Expr>,
     pub span: Option<Span>,
 }
 
@@ -154,18 +149,18 @@ pub struct Block<C: Container> {
 /// We have to introduce the concept of Stmts because
 /// things like `let a = t` and `fn a(){...}` are not
 /// valid Exprs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Stmt<C: Container> {
-    Let { lhs: Pattern<C>, rhs: Expr<C> },
-    Func { func: Box<Func<C>> },
-    Expr { expr: Expr<C> },
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Stmt {
+    Let { lhs: Pattern, rhs: Expr },
+    Func { func: Box<Func> },
+    Expr { expr: Expr },
     Empty { span: Option<Span> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Pattern<C: Container> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Pattern {
     Lit {
-        value: Lit<C>,
+        value: Lit,
         span: Option<Span>,
     },
     Var {
@@ -182,7 +177,7 @@ pub enum Pattern<C: Container> {
     },
 }
 
-impl<C: Container> Pattern<C> {
+impl Pattern {
     pub fn unit(span: Option<Span>) -> Self {
         Pattern::Tuple {
             elems: vec![],
@@ -191,7 +186,7 @@ impl<C: Container> Pattern<C> {
     }
 }
 
-impl<C: Container> GetSpanRef for Pattern<C> {
+impl GetSpanRef for Pattern {
     fn get_span_ref(&self) -> &Option<Span> {
         match self {
             Pattern::Var { span, .. }
@@ -202,7 +197,7 @@ impl<C: Container> GetSpanRef for Pattern<C> {
     }
 }
 
-impl<C: Container> GetSpanMut for Pattern<C> {
+impl GetSpanMut for Pattern {
     fn get_span_mut(&mut self) -> &mut Option<Span> {
         match self {
             Pattern::Var { span, .. }
@@ -213,7 +208,7 @@ impl<C: Container> GetSpanMut for Pattern<C> {
     }
 }
 
-impl<C: Container> HasTupleSyntax for Pattern<C> {
+impl HasTupleSyntax for Pattern {
     fn break_tuple(self) -> Result<Vec<Self>, Self> {
         match self {
             Self::Tuple { elems, .. } => Ok(elems),
@@ -234,26 +229,26 @@ impl<C: Container> HasTupleSyntax for Pattern<C> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Param<C: Container> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Param {
     pub name: Id<String>,
-    pub ty: Option<TypeExpr<C>>,
+    pub ty: Option<TypeExpr>,
     pub span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Func<C: Container> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Func {
     pub name: Id<String>,
-    pub params: Vec<Param<C>>,
-    pub ret_ty: TypeExpr<C>,
-    pub body: Block<C>,
+    pub params: Vec<Param>,
+    pub ret_ty: TypeExpr,
+    pub body: Block,
     pub name_span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeExpr<C: Container> {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TypeExpr {
     Basic {
-        t: BasicType<C>,
+        t: BasicType,
         span: Option<Span>,
     },
     Var {
@@ -261,12 +256,12 @@ pub enum TypeExpr<C: Container> {
         span: Option<Span>,
     },
     Arrow {
-        lhs: Box<TypeExpr<C>>,
-        rhs: Box<TypeExpr<C>>,
+        lhs: Box<TypeExpr>,
+        rhs: Box<TypeExpr>,
         span: Option<Span>,
     },
     Tuple {
-        elems: Vec<TypeExpr<C>>,
+        elems: Vec<TypeExpr>,
         span: Option<Span>,
     },
     ClosedTuple {
@@ -275,7 +270,7 @@ pub enum TypeExpr<C: Container> {
     },
 }
 
-impl<C: Container> TypeExpr<C> {
+impl TypeExpr {
     pub fn unit(span: Option<Span>) -> Self {
         TypeExpr::Tuple {
             elems: vec![],
@@ -284,7 +279,7 @@ impl<C: Container> TypeExpr<C> {
     }
 }
 
-impl<C: Container> GetSpanRef for TypeExpr<C> {
+impl GetSpanRef for TypeExpr {
     fn get_span_ref(&self) -> &Option<Span> {
         match self {
             TypeExpr::Basic { span, .. }
@@ -296,7 +291,7 @@ impl<C: Container> GetSpanRef for TypeExpr<C> {
     }
 }
 
-impl<C: Container> GetSpanMut for TypeExpr<C> {
+impl GetSpanMut for TypeExpr {
     fn get_span_mut(&mut self) -> &mut Option<Span> {
         match self {
             TypeExpr::Basic { span, .. }
@@ -308,7 +303,7 @@ impl<C: Container> GetSpanMut for TypeExpr<C> {
     }
 }
 
-impl<C: Container> HasTupleSyntax for TypeExpr<C> {
+impl HasTupleSyntax for TypeExpr {
     fn break_tuple(self) -> Result<Vec<Self>, Self> {
         match self {
             Self::Tuple { elems, .. } => Ok(elems),
