@@ -1,15 +1,15 @@
 use crate::ast::span::*;
 use crate::ast::typed::binding::Binding;
-use crate::ast::typed::Stmt;
-use crate::ast::typed::ty::{PrimitiveType, TupleType, Type,  };
+use crate::ast::typed::ty::{PrimitiveType, TupleType, Type};
 use crate::ast::typed::GetTy;
+use crate::ast::typed::{IdStmt, Stmt};
 use crate::container::*;
-use sight_macros::{make_sum_id, LiteralValue};
+use sight_macros::{make_sum_id, Item, LiteralValue};
 use std::marker::PhantomData;
 
 make_sum_id!(
     target_type: Expr,
-    id_type: ExprSumId,
+    id_type: IdExpr,
     LiteralExpr: LiteralExpr,
     VariableExpr: VariableExpr,
     ApplicationExpr: ApplicationExpr,
@@ -56,7 +56,7 @@ impl GetTy for Literal {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct LiteralExpr {
     pub value: Literal,
     pub span: Option<Span>,
@@ -68,7 +68,7 @@ impl GetTy for LiteralExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct VariableExpr {
     pub binding: Id<Binding>,
     pub name: Id<String>,
@@ -82,10 +82,10 @@ impl GetTy for VariableExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct ApplicationExpr {
-    pub callee: ExprSumId,
-    pub arg: ExprSumId,
+    pub callee: IdExpr,
+    pub arg: IdExpr,
     pub ty: Id<Type>,
     pub span: Option<Span>,
 }
@@ -96,7 +96,7 @@ impl GetTy for ApplicationExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct BlockExpr {
     pub block: Id<Block>,
 }
@@ -107,9 +107,9 @@ impl GetTy for BlockExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct TupleExpr {
-    pub elems: Vec<ExprSumId>,
+    pub elems: Vec<IdExpr>,
     pub span: Option<Span>,
 }
 
@@ -125,9 +125,9 @@ impl GetTy for TupleExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct ProjectionExpr {
-    pub target: Id<ExprSumId>,
+    pub target: IdExpr,
     pub index: usize,
     pub span: Option<Span>,
     pub ty: Id<Type>,
@@ -139,10 +139,10 @@ impl GetTy for ProjectionExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, LiteralValue, Hash, Item)]
 pub struct Block {
-    pub stmts: Vec<Id<Stmt>>,
-    pub value: Id<Expr>,
+    pub stmts: Vec<IdStmt>,
+    pub value: IdExpr,
     pub span: Option<Span>,
 }
 

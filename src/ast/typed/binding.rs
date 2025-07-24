@@ -1,3 +1,4 @@
+use sight_macros::Item;
 use crate::{
     ast::typed::{expr::Block, ty::Type},
     container::*,
@@ -6,7 +7,7 @@ use crate::{
 /// A singly linked tree, where you get pointers to parents
 /// but not children (like a git history graph)
 /// This makes it easy to append defs to any existing def.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Item)]
 pub struct Binding {
     pub parent: Option<Id<Binding>>,
     pub data: BindingData,

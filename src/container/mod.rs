@@ -59,6 +59,24 @@ pub enum Error<I> {
 }
 
 /// An item in the [Container].
+/// 
+/// **Note: NEVER implement `Item` for "base classes".**
+/// 
+/// For example:
+/// 
+/// ```ignore
+/// enum Animal
+/// {
+///     Cat(Cat)
+/// }
+/// ```
+/// 
+/// If you implement `Item` for `Animal`, people will never
+/// be able to create an `Id<Cat>` that points to a `Cat` object
+/// hidden inside a `BaseClass::Cat`.
+/// 
+/// To have a "polymorphic" ID type, 
+/// you should use `make_sum_id` to generate one.
 pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {
     #[must_use]
     #[inline(always)]
@@ -76,7 +94,8 @@ pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {
         c.encode_ex(self)
     }
 }
-impl<T: Debug + Sized + Clone + Eq + Hash + 'static> Item for T {}
+
+impl Item for String {}
 
 /// A [`Container`] can hold [`Item`]s of any type.
 ///

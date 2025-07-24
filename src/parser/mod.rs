@@ -188,10 +188,10 @@ peg::parser! {
             }
 
         rule param<C: Container,>(ctx: Rc<RefCell<C>>) -> Param =
-            lpos:position!() name:name(ctx.clone()) _ ty:type_annotation(ctx.clone())? rpos:position!() {
+            lpos:position!() name:name(ctx.clone()) _ ty:type_annotation(ctx.clone()) rpos:position!() {
                 Param {
                     name,
-                    ty: ty,
+                    ty_ann: ty,
                     span: Some(Span(lpos, rpos)),
                 }
             }
@@ -271,7 +271,7 @@ peg::parser! {
         }
 
         rule let_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
-            "let" __ lhs:pattern(ctx.clone()) ty:type_annotation(ctx.clone())? _ "=" _ rhs:expr(ctx.clone()) _ ";" {
+            "let" __ lhs:name(ctx.clone()) ty:type_annotation(ctx.clone())? _ "=" _ rhs:expr(ctx.clone()) _ ";" {
                 Stmt::Let {
                     lhs,
                     ty_ann: ty,
@@ -289,7 +289,7 @@ peg::parser! {
                     func: Box::new(Func {
                         name,
                         params: params.0,
-                        ret_ty,
+                        ret_ty_ann: ret_ty,
                         body,
                         name_span: Some(Span(lpos, rpos)),
                     }),

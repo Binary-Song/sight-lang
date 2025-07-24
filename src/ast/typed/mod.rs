@@ -1,12 +1,11 @@
 mod binding;
 mod expr;
-mod pattern;
+// mod pattern;
 mod stmt;
 mod ty;
 pub use binding::Binding;
 pub use binding::BindingData;
 pub use expr::*;
-pub use pattern::*;
 pub use stmt::*;
 pub use ty::*;
 use crate::container::Container;

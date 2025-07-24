@@ -13,6 +13,7 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3"
 peg = { path = "rust-peg" }
 trait-set = "0.3.0"
+static_assertions = "1.1.0"
 
 [build-dependencies]
 regex = "1.10"

@@ -1,6 +1,9 @@
+use sight_macros::{Item, LiteralValue};
+
 use crate::{
     ast::span::*,
-    container::{Container, Id},
+    container::{Container, Id, Item},
+    LiteralValue,
 };
 use std::marker::PhantomData;
 
@@ -22,21 +25,21 @@ pub trait HasTupleSyntax {
         Self: Sized;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum Lit {
     Unit,
     Bool(bool),
     Int(i32),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum BasicType {
     Unit,
     Bool,
     Int,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum Expr {
     Lit {
         value: Lit,
@@ -138,7 +141,7 @@ impl HasTupleSyntax for Expr {
 /// If a Blocks ends in a non-Expr Stmt, a fake unit
 /// Expr will be inserted to the end of the Block which will
 /// function as the return value.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub value: Option<Expr>,
@@ -149,7 +152,7 @@ pub struct Block {
 /// We have to introduce the concept of Stmts because
 /// things like `let a = t` and `fn a(){...}` are not
 /// valid Exprs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum Stmt {
     Let {
         lhs: Id<String>,
@@ -167,7 +170,7 @@ pub enum Stmt {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum Pattern {
     Lit {
         value: Lit,
@@ -239,14 +242,14 @@ impl HasTupleSyntax for Pattern {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, LiteralValue, Eq, Hash)]
 pub struct Param {
     pub name: Id<String>,
     pub ty_ann: TypeExpr,
     pub span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub struct Func {
     pub name: Id<String>,
     pub params: Vec<Param>,
@@ -255,7 +258,7 @@ pub struct Func {
     pub name_span: Option<Span>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub enum TypeExpr {
     Basic {
         t: BasicType,
