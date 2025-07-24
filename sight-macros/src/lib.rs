@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use proc_macro::TokenStream;
-use proc_macro2;
+use proc_macro2::Span;
 use quote::quote;
-use syn::{self, parse::Parse, parse_macro_input};
+use syn::{self, parse::Parse, parse_macro_input, token::Paren};
 
 #[proc_macro_derive(LiteralValue)]
 pub fn derive_literal_value(input: TokenStream) -> TokenStream {
@@ -185,6 +185,151 @@ pub fn derive_internable(input: TokenStream) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
         impl crate::utils::interning::Internable for #name {}
+    };
+    gen.into()
+}
+
+struct SumIdArgs {
+    name: syn::Ident,
+    name_id: syn::Ident,
+    arms: Vec<(syn::Ident, syn::Type)>,
+}
+
+impl Parse for SumIdArgs {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let keyword = input.parse::<syn::Ident>()?;
+        assert_eq!(keyword.to_string(), "target_type", "Expected 'sum_type' as the first argument");
+        input.parse::<syn::Token![:]>()?;
+        let name = input.parse::<syn::Ident>()?;
+        input.parse::<syn::Token![,]>()?;
+
+        let keyword = input.parse::<syn::Ident>()?;
+        assert_eq!(keyword.to_string(), "id_type", "Expected 'sum_type' as the first argument");
+        input.parse::<syn::Token![:]>()?;
+        let name_id = input.parse::<syn::Ident>()?;
+        input.parse::<syn::Token![,]>()?;
+        
+        let mut arms = vec![];
+        while !input.is_empty() {
+            // arm example: `foo: i32`
+            let arm_name = input.parse::<syn::Ident>()?;
+            input.parse::<syn::Token![:]>()?;
+            let arm_type = input.parse::<syn::Type>()?;
+            arms.push((arm_name, arm_type));
+            if input.peek(syn::Token![,]) {
+                input.parse::<syn::Token![,]>()?;
+            } else {
+                break;
+            }
+        }
+        Ok(SumIdArgs { name, name_id, arms })
+    }
+}
+
+/// A macro to generate a sum type and a sum ID type.
+/// Example usage:
+/// ```
+/// make_sum_id!(
+///     target_type: Foo,
+///     id_type: FooId,
+///     A: TypeA
+///     B: TypeB
+/// );
+/// ```
+/// This will generate something like:
+/// ```
+/// enum Foo {
+///    A(TypeA),
+///    B(TypeB),
+/// }
+/// ```
+/// 
+/// ```
+/// enum FooId {
+///    A(Id<TypeA>),
+///    B(Id<TypeB>),
+/// }
+/// ```
+/// along with `decode`, `decode_f` and `decode_ex`
+///  impls for `FooId`, which take a `Container` as an argument
+/// and return `Option<Foo>`, `Foo`, or `Result<Foo, DecodeError>` respectively,
+/// similar to `container::Id`.
+/// 
+/// Also, it generates `From` impls so you can do `let foo : Foo = TypeA{...}.into()` to convert from `TypeA` to `Foo`.
+#[proc_macro]
+pub fn make_sum_id(input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(input as SumIdArgs);
+    let name = &args.name;
+    let arms = &args.arms;
+    let name_id = &args.name_id;
+
+    let variants = arms.iter().map(|(arm_name, arm_type)| {
+        quote! { #arm_name(#arm_type) }
+    });
+
+    let variants_id = arms.iter().map(|(arm_name, arm_type)| {
+        quote! { #arm_name(Id<#arm_type>) }
+    });
+
+    let converts = arms.iter().map(|(arm_name, arm_type)| {
+        quote! {
+            impl From<#arm_type> for #name {
+                fn from(value: #arm_type) -> Self {
+                    #name::#arm_name(value)
+                }
+            }
+        }
+    });
+
+    let decode_arms = arms.iter().map(|(arm_name, arm_type)| {
+        quote! {
+            #name_id::#arm_name(id) => #name::#arm_name(id.decode(container)?)
+        }
+    });
+
+    let decode_f_arms = arms.iter().map(|(arm_name, arm_type)| {
+        quote! { 
+            #name_id::#arm_name(id) => #name::#arm_name(id.decode_f(container))
+        }
+    });
+
+    let decode_ex_arms = arms.iter().map(|(arm_name, arm_type)| {
+        quote! { 
+            #name_id::#arm_name(id) => #name::#arm_name(id.decode_ex(container)?)
+        }
+    });
+
+    let gen = quote! {
+
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+        pub enum #name {
+            #(#variants),*
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
+        pub enum #name_id {
+            #(#variants_id),*
+        }
+
+        #(#converts)*
+
+        impl #name_id {
+            pub fn decode<C: Container>(self, container: &C) -> Option<#name> {
+                Some(match self {
+                    #(#decode_arms),*
+                })
+            }
+            pub fn decode_f<C: Container>(self, container: &C) -> #name {
+                match self {
+                    #(#decode_f_arms),*
+                }
+            }
+            pub fn decode_ex<C: Container>(self, container: &C) -> Result<#name, DecodeError> {
+                Ok(match self {
+                    #(#decode_ex_arms),*
+                })
+            }
+        }
     };
     gen.into()
 }

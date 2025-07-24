@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
 
+
 fn binary_op<C: Container>(
     ctx: Rc<RefCell<C>>,
     op: &str,
@@ -50,7 +51,7 @@ fn join_into_tuple<C: Container, T: GetSpanRef + HasTupleSyntax>(
 }
 
 peg::parser! {
-    pub grammar sight() for str {
+    grammar sight() for str {
 
         /// Optional whitespace
         rule _ = __ *
@@ -270,9 +271,10 @@ peg::parser! {
         }
 
         rule let_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
-            "let" __ lhs:pattern(ctx.clone()) _ "=" _ rhs:expr(ctx.clone()) _ ";" {
+            "let" __ lhs:pattern(ctx.clone()) ty:type_annotation(ctx.clone())? _ "=" _ rhs:expr(ctx.clone()) _ ";" {
                 Stmt::Let {
                     lhs,
+                    ty_ann: ty,
                     rhs,
                 }
             }

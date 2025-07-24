@@ -18,7 +18,6 @@ mod sum;
 pub use arena::Arena;
 pub use interner::Interner;
 pub use sum::SumContainer;
-pub use sum::SumId;
 
 use crate::LiteralValue;
 use core::fmt;
@@ -60,7 +59,23 @@ pub enum Error<I> {
 }
 
 /// An item in the [Container].
-pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {}
+pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {
+    #[must_use]
+    #[inline(always)]
+    fn encode(self, c: &mut impl Container) -> Option<Id<Self>> {
+        c.encode(self)
+    }
+    #[must_use]
+    #[inline(always)]
+    fn encode_f(self, c: &mut impl Container) ->  Id<Self> {
+        c.encode_f(self)
+    }
+    #[must_use]
+    #[inline(always)]
+    fn encode_ex(self, c: &mut impl Container) -> Result<Id<Self>, EncodeError<Self>> {
+        c.encode_ex(self)
+    }
+}
 impl<T: Debug + Sized + Clone + Eq + Hash + 'static> Item for T {}
 
 /// A [`Container`] can hold [`Item`]s of any type.

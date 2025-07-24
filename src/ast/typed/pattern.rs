@@ -1,14 +1,18 @@
 use crate::{
     ast::{
         span::Span,
-        typed::{binding::Binding, r#type::Type},
+        typed::{binding::Binding, ty::Type},
     },
     container::*,
-    sum_id,
 };
-use sight_macros::LiteralValue;
+use sight_macros::{make_sum_id, LiteralValue};
 
-pub type PatternSumId = sum_id!(VariablePattern, TuplePattern);
+make_sum_id!(
+    target_type: Pattern,
+    id_type: PatternSumId,
+    VariablePattern: VariablePattern,
+    TuplePattern: TuplePattern,
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub struct VariablePattern {

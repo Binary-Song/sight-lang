@@ -151,10 +151,20 @@ pub struct Block {
 /// valid Exprs.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
-    Let { lhs: Pattern, rhs: Expr },
-    Func { func: Box<Func> },
-    Expr { expr: Expr },
-    Empty { span: Option<Span> },
+    Let {
+        lhs: Id<String>,
+        ty_ann: Option<TypeExpr>,
+        rhs: Expr,
+    },
+    Func {
+        func: Box<Func>,
+    },
+    Expr {
+        expr: Expr,
+    },
+    Empty {
+        span: Option<Span>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -232,7 +242,7 @@ impl HasTupleSyntax for Pattern {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Param {
     pub name: Id<String>,
-    pub ty: Option<TypeExpr>,
+    pub ty_ann: TypeExpr,
     pub span: Option<Span>,
 }
 
@@ -240,7 +250,7 @@ pub struct Param {
 pub struct Func {
     pub name: Id<String>,
     pub params: Vec<Param>,
-    pub ret_ty: TypeExpr,
+    pub ret_ty_ann: TypeExpr,
     pub body: Block,
     pub name_span: Option<Span>,
 }

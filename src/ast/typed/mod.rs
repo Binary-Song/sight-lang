@@ -2,7 +2,17 @@ mod binding;
 mod expr;
 mod pattern;
 mod stmt;
-mod r#type;
-use crate::container::Arena;
+mod ty;
+pub use binding::Binding;
+pub use binding::BindingData;
+pub use expr::*;
+pub use pattern::*;
+pub use stmt::*;
+pub use ty::*;
+use crate::container::Container;
 use crate::container::Id;
-use trait_set::trait_set;
+
+pub trait GetTy {
+    fn get_ty(&self, c: &mut impl Container) -> Id<Type>;
+}
+

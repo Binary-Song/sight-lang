@@ -1,5 +1,5 @@
 use crate::{
-    ast::typed::{expr::Block, r#type::Type},
+    ast::typed::{expr::Block, ty::Type},
     container::*,
 };
 
@@ -17,9 +17,9 @@ pub enum BindingData {
     Empty,
     FunctionDecl {
         name: Id<String>,
-        param_type: Id<Type>,
-        return_type: Id<Type>,
-        body_id: Id<Block>,
+        param_tys: Vec<Id<Type>>,
+        ret_ty: Id<Type>,
+        body_id: Option<Id<Block>>,
     },
     Variable {
         name: Id<String>,
