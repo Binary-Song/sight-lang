@@ -158,6 +158,7 @@ pub enum Stmt {
         lhs: Id<String>,
         ty_ann: Option<TypeExpr>,
         rhs: Expr,
+        name_span: Option<Span>,
     },
     Func {
         func: Box<Func>,
@@ -269,7 +270,7 @@ pub enum TypeExpr {
         span: Option<Span>,
     },
     Arrow {
-        lhs: Box<TypeExpr>,
+        lhs: Vec<TypeExpr>,
         rhs: Box<TypeExpr>,
         span: Option<Span>,
     },

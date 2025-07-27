@@ -16,7 +16,7 @@ make_sum_id!(
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
 pub struct VariablePattern {
-    pub binding_id: Id<Binding>,
+    pub binding_id: IdBinding,
     pub ty: Id<Type>,
     pub span: Option<Span>,
 }

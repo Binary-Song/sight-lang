@@ -33,9 +33,9 @@ impl<T: Item> Container for Arena<T> {
     }
 
     #[inline(always)]
-    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>> {
+    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError> {
         if TypeId::of::<T>() != TypeId::of::<I>() {
-            return Err(EncodeError::UnsupportedType(item));
+            return Err(EncodeError::UnsupportedType);
         }
         let new_id = Id(self.data.len(), PhantomData);
         let item_t: T = unsafe { cast::<I, T>(item) };

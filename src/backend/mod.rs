@@ -1,176 +1,66 @@
-// use crate::{
-//     ast::{
-//         id::{Id, IdMap},
-//         typed::{self as t, Arena, ArenaItem, GetArena, ProjectionExpr},
-//     },
-//     context::Context,
-//     utils::interning::GetInterner,
-// };
-// use std::collections::HashMap;
+use crate::container::DecodeError;
+use crate::container::EncodeError;
+use crate::container::Id;
+use crate::{
+    ast::typed::{Expr, LitExpr, Literal, VarExpr},
+    container::{Container, Item},
+    LiteralValue,
+};
+use sight_macros::make_sum_id;
+use sight_macros::Item;
+use sight_macros::LiteralValue;
 
-// #[derive(Clone, Debug, PartialEq, Eq)]
-// pub enum Instruction {
-//     Nop(),
-//     I1(bool),
-//     I32(i32),
-//     Call(Vec<Id<Instruction>>),
-//     Function(Id<Instruction>),
-//     Param(usize),
-//     Tuple(Vec<Id<Instruction>>),
-// }
+make_sum_id!(
+    target_type: Inst,
+    id_type: IdInst,
+    Int: IntInst,
+    Bool: BoolInst,
+    Add: AddInst,
+    Param: ParamInst,
+    Ret: RetInst,
+);
 
-// impl ArenaItem for Instruction {
-//     fn get_id_map<'a>(context: &'a Arena) -> &'a IdMap<Self> {
-//         &context.idmap_inst
-//     }
-//     fn get_mut_id_map<'a>(context: &'a mut Arena) -> &'a mut IdMap<Self> {
-//         &mut context.idmap_inst
-//     }
-// }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct IntInst(i32);
 
-// type CodegenResult<T> = Result<T, ()>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct BoolInst(bool);
 
-// impl Context {
-//     pub fn get_nop(&mut self) -> Id<Instruction> {
-//         Instruction::Nop().new_id(self)
-//     }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct AddInst(IdInst, IdInst);
 
-//     pub fn codegen_block(&mut self, ast: t::Block) -> CodegenResult<Id<Instruction>> {
-//         let (last, stmts) = match ast.stmts.split_last() {
-//             Some(x) => x,
-//             None => return Ok(self.get_nop()),
-//         };
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct ParamInst(usize);
 
-//         for stmt_id in stmts {
-//             let stmt = stmt_id.de(self);
-//             self.codegen_stmt(stmt)?;
-//         }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct RetInst(IdInst);
 
-//         let last = last.de(self);
-//         match last {
-//             t::Stmt::Expr(ex) => {
-//                 let inst = self.codegen_expr(ex)?;
-//                 Ok(inst)
-//             }
-//             _ => Ok(self.get_nop()),
-//         }
-//     }
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+struct BasicBlock {
+    insts: Vec<IdInst>,
+}
 
-//     pub fn codegen_stmt(&mut self, ast: t::Stmt) -> CodegenResult<Id<Instruction>> {
-//         match ast {
-//             t::Stmt::Let(let_stmt) => {
-//                 self.codegen_let(let_stmt.lhs, let_stmt.rhs)?;
-//                 Ok(self.get_nop())
-//             }
-//             t::Stmt::Function(fn_stmt) => {
-//                 self.codegen_param(fn_stmt.param, &mut 0)?;
-//                 let body_inst = self.codegen_block(fn_stmt.body.de(self))?;
-//                 let fn_inst = Instruction::Function(body_inst).new_id(self);
-//                 self.binding_targets.insert(fn_stmt.new_fn_id, fn_inst);
-//                 Ok(fn_inst)
-//             }
-//             t::Stmt::Block(block) => Ok(self.codegen_block(block)?),
-//             t::Stmt::Expr(expr_id) => self.codegen_expr(expr_id),
-//             t::Stmt::Empty(_) => Ok(self.get_nop()),
-//         }
-//     }
+impl BasicBlock {
+    fn push_inst(&mut self, inst: Inst, container: &mut impl Container) -> IdInst {
+        let inst_id = inst.encode_f(container);
+        self.insts.push(inst_id);
+        inst_id
+    }
+}
 
-//     pub fn codegen_expr(&mut self, expr: t::ExprId) -> CodegenResult<Id<Instruction>> {
-//         let lhs = expr.de(self);
-//         match lhs {
-//             t::Expr::Literal(t::LiteralExpr { value, span, ty }) => match value {
-//                 t::Literal::Bool(v) => Ok(Instruction::I1(v).new_id(self)),
-//                 t::Literal::Int(v) => Ok(Instruction::I32(v).new_id(self)),
-//             },
-//             t::Expr::Variable(t::VariableExpr {
-//                 target,
-//                 name,
-//                 ty,
-//                 span,
-//             }) => match self.binding_targets.get(&target) {
-//                 Some(inst) => Ok(inst.clone()),
-//                 None => Err(()),
-//             },
-//             t::Expr::Application(t::ApplicationExpr {
-//                 callee,
-//                 arg,
-//                 ty,
-//                 constraint,
-//                 span,
-//             }) => {
-//                 let callee_inst = self.codegen_expr(callee)?;
-//                 let arg_inst = self.codegen_expr(arg)?;
-//                 let call_inst = Instruction::Call(vec![callee_inst, arg_inst]).new_id(self);
-//                 Ok(call_inst)
-//             }
-//             t::Expr::Block(t::BlockExpr { block }) => Ok(self.codegen_block(block.de( self))?),
-//             t::Expr::Tuple(tuple_expr) => {
-                
-//                 Ok(vec![])
-//             }
-//             t::Expr::Projection(proj_expr) => {
-//                 // Handle projection expression
-//                 Ok(vec![])
-//             }
-//         }
-//     }
-
-//     pub fn codegen_param(
-//         &mut self,
-//         param: t::PatternId,
-//         param_index: &mut usize,
-//     ) -> CodegenResult<()> {
-//         let param = param.de(self);
-//         match param {
-//             t::Pattern::Variable(t::VariablePattern {
-//                 binding_id,
-//                 ty,
-//                 span,
-//             }) => {
-//                 let param_inst = Instruction::Param(*param_index).new_id(self);
-//                 *param_index += 1;
-//                 self.binding_targets.insert(binding_id, param_inst);
-//                 Ok(())
-//             }
-//             t::Pattern::Tuple(t::TuplePattern { elems, span, ty }) => {
-//                 for elem in elems {
-//                     self.codegen_param(elem, param_index);
-//                 }
-//                 Ok(())
-//             }
-//         }
-//     }
-
-//     pub fn codegen_let(&mut self, lhs: t::PatternId, rhs: t::ExprId) -> CodegenResult<()> {
-//         let lhs = lhs.de(self);
-//         match lhs {
-//             t::Pattern::Variable(t::VariablePattern {
-//                 binding_id,
-//                 ty,
-//                 span,
-//             }) => {
-//                 let rhs_inst = self.codegen_expr(rhs)?;
-//                 self.binding_targets.insert(binding_id, rhs_inst);
-//                 Ok(())
-//             }
-//             t::Pattern::Tuple(t::TuplePattern { elems, span, ty }) => {
-//                 for (idx, elem) in elems.iter().enumerate() {
-//                     let rhs_ty = match rhs.de(self).ty(self).de(self) {
-//                         t::Type::Tuple(t::TupleType { elems }) => elems[idx],
-//                         _ => return Err(()),
-//                     };
-//                     let rhs = (t::ProjectionExpr {
-//                         target: rhs,
-//                         index: idx,
-//                         span: (0, 0),
-//                         ty: rhs_ty,
-//                     })
-//                     .new_id(self);
-//                     let rhs = t::ExprId::Projection(rhs);
-//                     self.codegen_let(elem.clone(), rhs);
-//                 }
-//                 Ok(())
-//             }
-//         }
-//     }
-// }
+fn gen_expr(expr: Expr, bb: Id<BasicBlock>, container: &mut impl Container) -> Id<BasicBlock> {
+    match expr {
+        Expr::Lit(LitExpr { value, span }) => {
+            match value {
+                Literal::Int(val) => container
+                    .dec(bb)
+                    .push_inst(IntInst(val).upcast(), container),
+                Literal::Bool(val) => container
+                    .decode_mut_f(bb)
+                    .push_inst(BoolInst(val).upcast(), container),
+            };
+            todo!()
+        }
+        _ => todo!(),
+    }
+}

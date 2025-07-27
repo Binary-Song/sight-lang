@@ -12,10 +12,12 @@
 //! out in the wild, so be careful.
 //!
 mod arena;
+mod fallback_container;
 mod interner;
 mod sum;
 
 pub use arena::Arena;
+pub use fallback_container::FallbackContainer;
 pub use interner::Interner;
 pub use sum::SumContainer;
 
@@ -36,16 +38,17 @@ pub unsafe fn cast<Src, Dst>(src: Src) -> Dst {
 pub enum DecodeError {
     UnsupportedType,
     InvalidId,
+    BadType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum EncodeError<I: Item> {
+pub enum EncodeError {
     /// Unsupported type. The item is refunded as-is in the error.
-    UnsupportedType(I),
+    UnsupportedType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum RebindError<I: Item> {
+pub enum RebindError<I> {
     /// Unsupported type. The item is refunded as-is in the error.
     UnsupportedType(I),
     InvalidId,
@@ -59,23 +62,23 @@ pub enum Error<I> {
 }
 
 /// An item in the [Container].
-/// 
+///
 /// **Note: NEVER implement `Item` for "base classes".**
-/// 
+///
 /// For example:
-/// 
+///
 /// ```ignore
 /// enum Animal
 /// {
 ///     Cat(Cat)
 /// }
 /// ```
-/// 
+///
 /// If you implement `Item` for `Animal`, people will never
 /// be able to create an `Id<Cat>` that points to a `Cat` object
 /// hidden inside a `BaseClass::Cat`.
-/// 
-/// To have a "polymorphic" ID type, 
+///
+/// To have a "polymorphic" ID type,
 /// you should use `make_sum_id` to generate one.
 pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {
     #[must_use]
@@ -85,12 +88,12 @@ pub trait Item: Debug + Sized + Clone + Eq + Hash + 'static {
     }
     #[must_use]
     #[inline(always)]
-    fn encode_f(self, c: &mut impl Container) ->  Id<Self> {
+    fn encode_f(self, c: &mut impl Container) -> Id<Self> {
         c.encode_f(self)
     }
     #[must_use]
     #[inline(always)]
-    fn encode_ex(self, c: &mut impl Container) -> Result<Id<Self>, EncodeError<Self>> {
+    fn encode_ex(self, c: &mut impl Container) -> Result<Id<Self>, EncodeError> {
         c.encode_ex(self)
     }
 }
@@ -134,12 +137,20 @@ pub trait Container: Sized + Debug {
     /// Encode the item to get an ID that points to it.
     ///
     #[doc = include_str!("doc/_ex.md")]
-    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>>;
+    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError>;
     /// Rebind an ID to a new value of the same type.
     ///
     #[doc = include_str!("doc/_ex.md")]
     #[must_use]
     fn rebind_ex<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>>;
+    
+    /// Decode the ID to get the pointed-to reference
+    ///
+    #[doc = include_str!("doc/_ex.md")]
+    #[must_use]
+    fn decode_swap_ex<I: Item>(&mut self, id: Id<I>) -> Result<I, DecodeError> {
+        Err(DecodeError::UnsupportedType)
+    }
 
     /// Decode the ID to get the pointed-to value.
     #[inline(always)]
@@ -191,6 +202,13 @@ pub trait Container: Sized + Debug {
     fn rebind_f<I: Item>(&mut self, id: Id<I>, item: I) {
         self.rebind(id, item)
             .expect("Failed to rebind ID using the container");
+    }
+    /// Decode the ID to get the pointed-to reference
+    ///
+    #[doc = include_str!("doc/_ex.md")]
+    #[must_use]
+    fn decode_swap_f<I: Item>(&mut self, id: Id<I>) ->  I {
+        self.decode_swap_ex(id).unwrap()
     }
 }
 

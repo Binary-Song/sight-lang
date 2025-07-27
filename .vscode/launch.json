@@ -1,48 +1,16 @@
 {
-    // 使用 IntelliSense 了解相关属性。 
-    // 悬停以查看现有属性的描述。
-    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
     "configurations": [
-        
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'sight-lang'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=sight-lang",
-                    "--package=sight-lang"
-                ],
-                "filter": {
-                    "name": "sight-lang",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+    {
+        "type": "lldb",
+        "request": "launch",
+        "name": "Cargo launch",
+        "cargo": {
+            "args": [
+                "build",
+                "--lib"
+            ]
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug test 'parser::tests::expr::test_parse_expr_func' in 'sight-lang'",
-            "cargo": {
-            "args": [
-                "test",
-                "--no-run",
-                "--bin=sight-lang",
-                "--package=sight-lang"
-            ],
-            "filter": {
-                "name": "sight-lang",
-                "kind": "bin"
-            }
-            },
-            "args": [
-            "parser::tests::expr::test_parse_expr_func"
-            ],
-            "cwd": "${workspaceFolder}"
-        }
+        "args": []
+    }
     ]
 }

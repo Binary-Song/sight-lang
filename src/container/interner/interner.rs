@@ -11,6 +11,12 @@ pub struct Interner<T: Item> {
     indices: HashMap<T, usize>,
 }
 
+impl<T: Item> Interner<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl<T: Item> Default for Interner<T> {
     fn default() -> Self {
         Self {
@@ -38,9 +44,9 @@ impl<T: Item> Container for Interner<T> {
     }
 
     #[inline(always)]
-    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError<I>> {
+    fn encode_ex<I: Item>(&mut self, item: I) -> Result<Id<I>, EncodeError> {
         if TypeId::of::<T>() != TypeId::of::<I>() {
-            return Err(EncodeError::UnsupportedType(item));
+            return Err(EncodeError::UnsupportedType);
         }
         let item = unsafe { cast::<I, T>(item) };
         if let Some(&index) = self.indices.get(&item) {

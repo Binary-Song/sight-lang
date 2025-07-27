@@ -1,42 +1,41 @@
 use crate::ast::span::*;
-use crate::ast::typed::binding::Binding;
+use crate::ast::typed::binding::IdBinding;
 use crate::ast::typed::ty::{PrimitiveType, TupleType, Type};
 use crate::ast::typed::GetTy;
-use crate::ast::typed::{IdStmt, Stmt};
+use crate::ast::typed::IdStmt;
 use crate::container::*;
 use sight_macros::{make_sum_id, Item, LiteralValue};
-use std::marker::PhantomData;
 
 make_sum_id!(
     target_type: Expr,
     id_type: IdExpr,
-    LiteralExpr: LiteralExpr,
-    VariableExpr: VariableExpr,
-    ApplicationExpr: ApplicationExpr,
-    BlockExpr: BlockExpr,
-    TupleExpr: TupleExpr,
-    ProjectionExpr: ProjectionExpr,
+    Lit: LitExpr,
+    Var: VarExpr,
+    App: AppExpr,
+    Block: BlockExpr,
+    Tuple: TupleExpr,
+    Proj: ProjExpr,
 );
 
 impl Expr {
-    pub fn tuple(span: Option<Span>) -> Expr {
+    pub fn unit(span: Option<Span>) -> Expr {
         TupleExpr {
             elems: vec![],
             span,
         }
-        .into()
+        .upcast()
     }
 }
 
 impl GetTy for Expr {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         match self {
-            Expr::LiteralExpr(e) => e.get_ty(c),
-            Expr::VariableExpr(e) => e.get_ty(c),
-            Expr::ApplicationExpr(e) => e.get_ty(c),
-            Expr::BlockExpr(e) => e.get_ty(c),
-            Expr::TupleExpr(e) => e.get_ty(c),
-            Expr::ProjectionExpr(e) => e.get_ty(c),
+            Expr::Lit(e) => e.get_ty(c),
+            Expr::Var(e) => e.get_ty(c),
+            Expr::App(e) => e.get_ty(c),
+            Expr::Block(e) => e.get_ty(c),
+            Expr::Tuple(e) => e.get_ty(c),
+            Expr::Proj(e) => e.get_ty(c),
         }
     }
 }
@@ -50,47 +49,47 @@ pub enum Literal {
 impl GetTy for Literal {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         match self {
-            Literal::Int(_) => PrimitiveType::Int.to_type().encode_f(c),
-            Literal::Bool(_) => PrimitiveType::Bool.to_type().encode_f(c),
+            Literal::Int(_) => PrimitiveType::Int.upcast().encode_f(c),
+            Literal::Bool(_) => PrimitiveType::Bool.upcast().encode_f(c),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
-pub struct LiteralExpr {
+pub struct LitExpr {
     pub value: Literal,
     pub span: Option<Span>,
 }
 
-impl GetTy for LiteralExpr {
+impl GetTy for LitExpr {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         self.value.get_ty(c)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
-pub struct VariableExpr {
-    pub binding: Id<Binding>,
+pub struct VarExpr {
+    pub binding: IdBinding,
     pub name: Id<String>,
     pub ty: Id<Type>,
     pub span: Option<Span>,
 }
 
-impl GetTy for VariableExpr {
+impl GetTy for VarExpr {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         self.ty
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
-pub struct ApplicationExpr {
+pub struct AppExpr {
     pub callee: IdExpr,
-    pub arg: IdExpr,
+    pub args: Vec<IdExpr>,
     pub ty: Id<Type>,
     pub span: Option<Span>,
 }
 
-impl GetTy for ApplicationExpr {
+impl GetTy for AppExpr {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         self.ty
     }
@@ -126,14 +125,14 @@ impl GetTy for TupleExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
-pub struct ProjectionExpr {
-    pub target: IdExpr,
+pub struct ProjExpr {
+    pub tuple: IdExpr,
     pub index: usize,
     pub span: Option<Span>,
     pub ty: Id<Type>,
 }
 
-impl GetTy for ProjectionExpr {
+impl GetTy for ProjExpr {
     fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
         self.ty
     }

@@ -1,3 +1,6 @@
+use peg::error::ParseError;
+use peg::str::LineCol;
+
 use crate::ast::raw::{
     BasicType, Block, Expr, Func, HasTupleSyntax, Lit, Param, Pattern, Stmt, TypeExpr,
 };
@@ -7,7 +10,6 @@ use crate::container::Id;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
-
 
 fn binary_op<C: Container>(
     ctx: Rc<RefCell<C>>,
@@ -104,7 +106,7 @@ peg::parser! {
 
         /// A name.
         rule name<C: Container,>(ctx: Rc<RefCell<C>>) -> Id<String> =
-            n:$(quiet!{[c if c.is_alphabetic()][c if c.is_alphanumeric()]*}
+            n:$(quiet!{[c if c.is_alphabetic() || c == '_' ][c if c.is_alphanumeric()|| c == '_']*}
             / expected!("name")) {
                 ctx.clone().borrow_mut().encode_f(n.to_string())
             }
@@ -202,14 +204,24 @@ peg::parser! {
             }
 
         rule param_list_with_paren<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Param>, Span) =
-            params:paren_raw(  <param_list(ctx.clone())>) {
+            params:paren_raw(<param_list(ctx.clone())>) {
                 params
+            }
+
+        rule type_list<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<TypeExpr>, Span) =
+            lpos:position!() types:comma_list( <type_expr(ctx.clone())>) rpos:position!() {
+                (types, Span(lpos, rpos))
+            }
+
+        rule type_list_with_paren<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<TypeExpr>, Span) =
+            types:paren_raw(<type_list(ctx.clone())>) {
+                types
             }
 
         pub rule expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr = precedence!{
             // lambda with 1 param:
-            // x => body
-            lhs:param(ctx.clone()) _ "=>" _ rhs:(@) {
+            // x -> body
+            lhs:param(ctx.clone()) _ "->" _ rhs:(@) {
                 let lhs_span = lhs.span.clone().unwrap();
                 Expr::Lambda {
                     span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
@@ -218,19 +230,14 @@ peg::parser! {
                 }
             }
             // lambda with 2+ params:
-            // e.g. (x, y: int) => body
-            lhs:param_list_with_paren(ctx.clone()) _ "=>" _ rhs:(@) {
+            // e.g. (x, y: int) -> body
+            lhs:param_list_with_paren(ctx.clone()) _ "->" _ rhs:(@) {
                 let (lhs, lhs_span) = lhs;
                 Expr::Lambda {
                     span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
                     params: lhs,
                     body: Box::new(rhs),
                 }
-            }
-            --
-            // tuple
-            lhs:(@) _ op:$(",") _ rhs:@ {
-                join_into_tuple(ctx.clone(), lhs, rhs)
             }
             --
             // plus/minus
@@ -253,7 +260,7 @@ peg::parser! {
                 }
             }
             --
-            e: paren(  <expr(ctx.clone())>) { e }
+            e: paren(<expr(ctx.clone())>) { e }
             e: block_expr(ctx.clone()) { e }
             e: literal_expr(ctx.clone()) { e }
             e: var_expr(ctx.clone()) { e }
@@ -265,21 +272,22 @@ peg::parser! {
                 join_into_tuple(ctx.clone(), lhs, rhs)
             }
             --
-            e: paren(  <pattern(ctx.clone())>) { e }
+            e: paren(<pattern(ctx.clone())>) { e }
             e: literal_pattern(ctx.clone()) { e }
             e: var_pattern(ctx.clone()) { e }
         }
 
-        rule let_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
-            "let" __ lhs:name(ctx.clone()) ty:type_annotation(ctx.clone())? _ "=" _ rhs:expr(ctx.clone()) _ ";" {
+        pub rule let_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
+            "let" __ lpos:position!() lhs:name(ctx.clone()) rpos:position!() ty:type_annotation(ctx.clone())? _ "=" _ rhs:expr(ctx.clone()) _ ";" {
                 Stmt::Let {
                     lhs,
                     ty_ann: ty,
                     rhs,
+                    name_span: Some(Span(lpos, rpos)),
                 }
             }
 
-        rule func_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
+        pub rule func_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             "fun" __
             lpos:position!() name:name(ctx.clone()) rpos:position!() _
             params:param_list_with_paren(ctx.clone()) _
@@ -296,7 +304,7 @@ peg::parser! {
                 }
             }
 
-        rule expr_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
+        pub rule expr_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
             e:expr(ctx.clone()) _ ";" {
                 Stmt::Expr {
                     expr: e,
@@ -338,23 +346,36 @@ peg::parser! {
                 e
             }
             --
-            // tuple
-            lhs:(@) _ op:$(",") _ rhs:@ {
-                join_into_tuple(ctx.clone(), lhs, rhs)
-            }
-            --
-            // arrow
+            // arrow type: a -> b
             lhs:@ _ op:$("->") _ rhs:(@) {
                 TypeExpr::Arrow {
                     span: lhs.join_spans(&rhs),
-                    lhs: Box::new(lhs),
+                    lhs: vec![lhs],
+                    rhs: Box::new(rhs),
+                }
+            }
+            // arrow type: (a, b) -> c
+            lhs:type_list_with_paren(ctx.clone()) _ "->" _ rhs:(@) {
+                TypeExpr::Arrow {
+                    span: rhs.get_span().map(|rhs_span| Span(lhs.1.0, rhs_span.1)),
+                    lhs: lhs.0,
                     rhs: Box::new(rhs),
                 }
             }
             --
-            e: paren( <type_expr(ctx.clone())>) { e }
+            e: paren(<type_expr(ctx.clone())>) { e }
             e: basic_type_expr(ctx.clone()) { e }
             e: var_type_expr(ctx.clone()) { e }
         }
     }
+}
+
+pub fn parse_expr(input: &str, ctx: Rc<RefCell<impl Container>>) -> Result<Expr, ParseError<LineCol>> {
+    let a = sight::expr(input, ctx);
+    a
+}
+
+pub fn parse_func(input: &str, ctx: Rc<RefCell<impl Container>>) -> Result<Stmt, ParseError<LineCol>> {
+    let a = sight::func_stmt(input, ctx);
+    a
 }
