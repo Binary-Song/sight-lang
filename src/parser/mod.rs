@@ -1,12 +1,11 @@
-use peg::error::ParseError;
-use peg::str::LineCol;
-
 use crate::ast::raw::{
     BasicType, Block, Expr, Func, HasTupleSyntax, Lit, Param, Pattern, Stmt, TypeExpr,
 };
 use crate::ast::span::*;
 use crate::container::Container;
 use crate::container::Id;
+use peg::error::ParseError;
+use peg::str::LineCol;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
@@ -218,28 +217,17 @@ peg::parser! {
                 types
             }
 
+        rule arg_list<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Expr>, Span) =
+            lpos:position!() params:comma_list( <expr(ctx.clone())>) rpos:position!() {
+                (params, Span(lpos, rpos))
+            }
+
+        rule arg_list_with_paren<C: Container,>(ctx: Rc<RefCell<C>>) -> (Vec<Expr>, Span) =
+            params:paren_raw(<arg_list(ctx.clone())>) {
+                params
+            }
+
         pub rule expr<C: Container,>(ctx: Rc<RefCell<C>>) -> Expr = precedence!{
-            // lambda with 1 param:
-            // x -> body
-            lhs:param(ctx.clone()) _ "->" _ rhs:(@) {
-                let lhs_span = lhs.span.clone().unwrap();
-                Expr::Lambda {
-                    span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
-                    params: vec![lhs],
-                    body: Box::new(rhs),
-                }
-            }
-            // lambda with 2+ params:
-            // e.g. (x, y: int) -> body
-            lhs:param_list_with_paren(ctx.clone()) _ "->" _ rhs:(@) {
-                let (lhs, lhs_span) = lhs;
-                Expr::Lambda {
-                    span: Some(lhs_span + rhs.get_span_ref().clone().unwrap()),
-                    params: lhs,
-                    body: Box::new(rhs),
-                }
-            }
-            --
             // plus/minus
             lhs:(@) _ op_lpos: position!() op:$("+" / "-") op_rpos: position!() _ rhs:@ {
                 binary_op(ctx.clone(), op, Span(op_lpos, op_rpos), lhs, rhs)
@@ -250,12 +238,15 @@ peg::parser! {
                 binary_op(ctx.clone(), op, Span(op_lpos, op_rpos), lhs, rhs)
             }
             --
-            // application
-            lhs:(@) _ rhs:@ {
-                let span = lhs.join_spans(&rhs);
+            // function call
+            lhs:(@) args: arg_list_with_paren(ctx.clone())  {
+                let (args, args_span) = args;
+                let span = lhs.get_span().map(|lhs_span| {
+                   lhs_span + args_span
+                });
                 Expr::App {
                     func: Box::new(lhs),
-                    args: vec![rhs],
+                    args: args,
                     span: span,
                 }
             }
@@ -285,6 +276,26 @@ peg::parser! {
                     rhs,
                     name_span: Some(Span(lpos, rpos)),
                 }
+            }
+
+        pub rule if_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt =
+            "if" __
+            cond:expr(ctx.clone()) _
+            then_br: block(ctx.clone()) _
+            "else" _
+            else_br: block(ctx.clone()) {
+                Stmt::If {
+                    cond,
+                    then_br,
+                    else_br,
+                }
+            }
+
+        pub rule while_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt =
+            "while" __
+            cond:expr(ctx.clone()) _
+            body: block(ctx.clone()) {
+                Stmt::While { cond , body  }
             }
 
         pub rule func_stmt<C: Container,>(ctx: Rc<RefCell<C>>) -> Stmt =
@@ -370,12 +381,18 @@ peg::parser! {
     }
 }
 
-pub fn parse_expr(input: &str, ctx: Rc<RefCell<impl Container>>) -> Result<Expr, ParseError<LineCol>> {
+pub fn parse_expr(
+    input: &str,
+    ctx: Rc<RefCell<impl Container>>,
+) -> Result<Expr, ParseError<LineCol>> {
     let a = sight::expr(input, ctx);
     a
 }
 
-pub fn parse_func(input: &str, ctx: Rc<RefCell<impl Container>>) -> Result<Stmt, ParseError<LineCol>> {
+pub fn parse_func(
+    input: &str,
+    ctx: Rc<RefCell<impl Container>>,
+) -> Result<Stmt, ParseError<LineCol>> {
     let a = sight::func_stmt(input, ctx);
     a
 }

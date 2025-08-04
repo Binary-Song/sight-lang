@@ -149,9 +149,11 @@ pub fn collect_block_bindings(
             r::Stmt::Func { func } => {
                 let name = func.name;
                 let mut param_tys = Vec::new();
+                let mut param_names = Vec::new();
                 for p in &func.params {
                     let t = p.ty_ann.get_ty(container)?;
                     param_tys.push(t);
+                    param_names.push(p.name);
                 }
                 let ret_ty = func.ret_ty_ann.get_ty(container)?;
                 let binding = parent_binding.derive(
@@ -161,6 +163,7 @@ pub fn collect_block_bindings(
                         param_tys,
                         ret_ty,
                         full_data: None,
+                        param_names
                     }
                     .into(),
                 );
@@ -339,6 +342,9 @@ pub fn infer_type_for_stmt(
             Ok((stmt, context, local_vars))
         }
         r::Stmt::Empty { span } => Ok((t::EmptyStmt { span }.into(), context, local_vars)),
+        r::Stmt::If { cond, then_br, else_br } => {
+            
+        }
     }
 }
 
@@ -505,9 +511,6 @@ pub fn infer_type_for_expr(
                 block: typed_block.encode_f(container),
             };
             Ok((typed_block_expr.upcast(), local_vars))
-        }
-        r::Expr::Lambda { params, body, span } => {
-            todo!()
         }
     }
 }

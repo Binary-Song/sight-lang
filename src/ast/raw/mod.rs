@@ -68,11 +68,6 @@ pub enum Expr {
         span: Option<Span>,
     },
     Block(Box<Block>),
-    Lambda {
-        params: Vec<Param>,
-        body: Box<Self>,
-        span: Option<Span>,
-    },
 }
 
 impl Expr {
@@ -92,7 +87,6 @@ impl GetSpanRef for Expr {
             | Expr::App { span, .. }
             | Expr::Tuple { span, .. }
             | Expr::ClosedTuple { span, .. }
-            | Expr::Lambda { span, .. }
             | Expr::Proj { span, .. } => span,
             Expr::Block(block) => &block.span,
         }
@@ -107,7 +101,6 @@ impl GetSpanMut for Expr {
             | Expr::App { span, .. }
             | Expr::Tuple { span, .. }
             | Expr::ClosedTuple { span, .. }
-            | Expr::Lambda { span, .. }
             | Expr::Proj { span, .. } => span,
             Expr::Block(block) => &mut block.span,
         }
@@ -169,6 +162,15 @@ pub enum Stmt {
     Empty {
         span: Option<Span>,
     },
+    If {
+        cond: Expr,
+        then_br: Block,
+        else_br: Block,
+    },
+    While {
+        cond: Expr,
+        body: Block,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]

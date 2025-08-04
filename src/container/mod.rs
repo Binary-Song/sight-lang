@@ -143,14 +143,6 @@ pub trait Container: Sized + Debug {
     #[doc = include_str!("doc/_ex.md")]
     #[must_use]
     fn rebind_ex<I: Item>(&mut self, id: Id<I>, item: I) -> Result<(), RebindError<I>>;
-    
-    /// Decode the ID to get the pointed-to reference
-    ///
-    #[doc = include_str!("doc/_ex.md")]
-    #[must_use]
-    fn decode_swap_ex<I: Item>(&mut self, id: Id<I>) -> Result<I, DecodeError> {
-        Err(DecodeError::UnsupportedType)
-    }
 
     /// Decode the ID to get the pointed-to value.
     #[inline(always)]
@@ -203,12 +195,11 @@ pub trait Container: Sized + Debug {
         self.rebind(id, item)
             .expect("Failed to rebind ID using the container");
     }
-    /// Decode the ID to get the pointed-to reference
-    ///
-    #[doc = include_str!("doc/_ex.md")]
-    #[must_use]
-    fn decode_swap_f<I: Item>(&mut self, id: Id<I>) ->  I {
-        self.decode_swap_ex(id).unwrap()
+
+    fn map_f<I: Item>(&mut self, id: Id<I>, map: impl FnOnce(&mut Self, I) -> I) {
+        let item = self.decode_f(id);
+        let mapped = map(self, item);
+        self.rebind(id, mapped);
     }
 }
 
@@ -274,5 +265,11 @@ impl<I: Item> LiteralValue for Id<I> {
 impl<I: Item> Hash for Id<I> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.hash(state);
+    }
+}
+
+impl<I: Item> Default for Id<I> {
+    fn default() -> Self {
+        Self(Default::default(), Default::default())
     }
 }

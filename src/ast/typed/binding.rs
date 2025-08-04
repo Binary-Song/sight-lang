@@ -1,5 +1,5 @@
 use crate::{
-    ast::typed::{expr::Block, ty::Type},
+    ast::typed::{expr::Block, ty::Type, FunctionType},
     container::*,
 };
 use sight_macros::{make_sum_id, Item, LiteralValue};
@@ -13,7 +13,6 @@ make_sum_id!(
     Param: ParamBinding,
 );
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct EmptyBinding {
     pub parent: Option<IdBinding>,
@@ -24,12 +23,24 @@ pub struct FuncBinding {
     pub parent: Option<IdBinding>,
     pub name: Id<String>,
     pub param_tys: Vec<Id<Type>>,
+    pub param_names: Vec<Id<String>>,
     pub ret_ty: Id<Type>,
     /// This data is only available after processing
-    /// the body (the second pass). 
+    /// the body (the second pass).
     /// The rest is available after processing the
     /// prototype (the first pass).
     pub full_data: Option<FuncFullData>,
+}
+
+impl FuncBinding {
+    pub fn ty(&self, c: &mut impl Container) -> Id<Type> {
+        FunctionType {
+            lhs: self.param_tys.clone(),
+            rhs: self.ret_ty,
+        }
+        .to_type()
+        .encode_f(c)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
