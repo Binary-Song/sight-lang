@@ -8,9 +8,9 @@ pub use expr::*;
 pub use stmt::*;
 pub use ty::*;
 use crate::container::Container;
-use crate::container::Id;
+use crate::container::Uid;
 
 pub trait GetTy {
-    fn get_ty(&self, c: &mut Container) -> Id<Type>;
+    fn get_ty(&self, c: &mut Container) -> Uid<Type>;
 }
 

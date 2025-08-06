@@ -1,7 +1,7 @@
 use std::ops::Add;
 use sight_macros::LiteralValue;
 
-#[derive(Debug, Clone, PartialEq, Eq, LiteralValue, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, LiteralValue, Hash)]
 pub struct Span(pub usize, pub usize);
 
 impl Add for Span {

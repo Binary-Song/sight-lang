@@ -3,6 +3,7 @@ use proc_macro2::Span;
 use quote::quote;
 use std::collections::HashMap;
 use syn::{self, parse::Parse};
+mod upcast;
 mod id;
 
 #[proc_macro_derive(IdEnum)]
@@ -217,4 +218,9 @@ pub fn derive_id_enum(input: TokenStream) -> TokenStream {
         impl crate::utils::interning::Internable for #name {}
     };
     gen.into()
+}
+
+#[proc_macro_derive(Upcast, attributes(upcast))]
+pub fn derive_upcast(input: TokenStream) -> TokenStream {
+    upcast::derive_upcast_impl(input)
 }

@@ -11,7 +11,7 @@ use crate::ast::typed::TupleType;
 use crate::ast::typed::VarBinding;
 use crate::container::Container;
 use crate::container::Id;
-use crate::container::Item;
+use crate::container::Uid;
 use std::collections::HashSet;
 use t::Binding;
 
@@ -19,20 +19,20 @@ type LocalVars = Vec<Id<VarBinding>>;
 
 #[derive(Debug)]
 pub enum TypingError {
-    VariableNotFound(Id<String>),
-    NameIsNotAVariable(Id<String>),
+    VariableNotFound(Uid<String>),
+    NameIsNotAVariable(Uid<String>),
     TypeCheckingFailed {
-        expected: Id<t::Type>,
-        got: Id<t::Type>,
+        expected: Uid<t::Type>,
+        got: Uid<t::Type>,
     },
-    DuplicateName(Id<String>),
+    DuplicateName(Uid<String>),
     CallingANonFunction {
-        got: Id<t::Type>,
+        got: Uid<t::Type>,
     },
     CallingWithAnIncorrectNumberOfArgs(),
     IncorrectArgType {
-        expected: Id<t::Type>,
-        got: Id<t::Type>,
+        expected: Uid<t::Type>,
+        got: Uid<t::Type>,
     },
     ProjectionOnNonTuple,
     ProjBadIndex,
@@ -41,7 +41,7 @@ pub enum TypingError {
 pub type TypingResult<T> = Result<T, TypingError>;
 
 impl GetTy for r::BasicType {
-    fn get_ty(&self, container: &mut Container) -> Id<t::Type> {
+    fn get_ty(&self, container: &mut Container) -> Uid<t::Type> {
         match self {
             r::BasicType::Unit => t::Type::unit().enc(container),
             r::BasicType::Bool => t::PrimitiveType::Bool.upcast().enc(container),
@@ -51,7 +51,7 @@ impl GetTy for r::BasicType {
 }
 
 impl r::TypeExpr {
-    fn get_ty<'c>(&self, container: &'c mut impl Container) -> TypingResult<Id<t::Type>> {
+    fn get_ty<'c>(&self, container: &'c mut Container) -> TypingResult<Id<t::Type>> {
         match self {
             r::TypeExpr::Basic { t, .. } => Ok(t.get_ty(container)),
             r::TypeExpr::Var { .. } => {
@@ -82,7 +82,7 @@ impl r::TypeExpr {
 }
 
 pub fn lookup_name(
-    name: Id<String>,
+    name: Uid<String>,
     container: &mut Container,
     context: IdBinding,
 ) -> Option<IdBinding> {
@@ -137,7 +137,7 @@ pub fn collect_block_bindings(
     container: &mut Container,
     mut context: IdBinding,
 ) -> TypingResult<IdBinding> {
-    let mut used_names = HashSet::<Id<String>>::new();
+    let mut used_names = HashSet::<Uid<String>>::new();
     /// Gets the binding id if this Stmt
     /// is a FuncStmt.
     fn handle_stmt(

@@ -2,7 +2,7 @@ use sight_macros::{Item, LiteralValue};
 
 use crate::{
     ast::span::*,
-    container::{Container, Id, Item},
+    container::{Container, Id,  },
     LiteralValue,
 };
 use std::marker::PhantomData;

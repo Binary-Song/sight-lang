@@ -14,11 +14,14 @@
 mod v2;
 
 pub use v2::Arena;
+pub use v2::ArenaItem;
+pub use v2::ArenaLike;
 pub use v2::Container;
 pub use v2::Id;
 pub use v2::Interner;
+pub use v2::InternerItem;
+pub use v2::InternerLike;
 pub use v2::Uid;
-pub use v2::Item;
 
 use crate::LiteralValue;
 use core::fmt;

@@ -2,30 +2,28 @@ use crate::{
     ast::typed::{expr::Block, ty::Type, FunctionType},
     container::*,
 };
-use sight_macros::{ Item, LiteralValue};
+use sight_macros::{IdEnum, Item, LiteralValue};
 
-make_sum_id!(
-    target_type: Binding,
-    id_type: IdBinding,
-    Empty: EmptyBinding,
-    Func: FuncBinding,
-    Var: VarBinding,
-    Param: ParamBinding,
-);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, IdEnum)]
+pub enum Binding {
+    Empty(EmptyBinding),
+    Func(FuncBinding),
+    Var(VarBinding),
+    Param(ParamBinding),
+}
 
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue,  )]
 pub struct EmptyBinding {
     pub parent: Option<IdBinding>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue,  )]
 pub struct FuncBinding {
     pub parent: Option<IdBinding>,
-    pub name: Id<String>,
-    pub param_tys: Vec<Id<Type>>,
-    pub param_names: Vec<Id<String>>,
-    pub ret_ty: Id<Type>,
+    pub name: Uid<String>,
+    pub param_tys: Vec<Uid<Type>>,
+    pub param_names: Vec<Uid<String>>,
+    pub ret_ty: Uid<Type>,
     /// This data is only available after processing
     /// the body (the second pass).
     /// The rest is available after processing the
@@ -34,13 +32,13 @@ pub struct FuncBinding {
 }
 
 impl FuncBinding {
-    pub fn ty(&self, c: &mut Container) -> Id<Type> {
+    pub fn ty(&self, c: &mut Container) -> Uid<Type> {
         FunctionType {
             lhs: self.param_tys.clone(),
-            rhs: self.ret_ty,
+            rhs: self.ret_ty.clone(),
         }
         .to_type()
-        .enc(c)
+        .int(c)
     }
 }
 
@@ -51,28 +49,28 @@ pub struct FuncFullData {
     pub body_id: Id<Block>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue,  )]
 pub struct VarBinding {
     pub parent: Option<IdBinding>,
-    pub name: Id<String>,
-    pub ty: Id<Type>,
+    pub name: Uid<String>,
+    pub ty: Uid<Type>,
     pub index: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue,  )]
 pub struct ParamBinding {
     pub parent: Option<IdBinding>,
-    pub name: Id<String>,
-    pub ty: Id<Type>,
+    pub name: Uid<String>,
+    pub ty: Uid<Type>,
     pub index: usize,
 }
 
 impl Binding {
-    pub fn name(&self) -> Option<Id<String>> {
+    pub fn name(&self) -> Option<Uid<String>> {
         match self {
             Binding::Func(FuncBinding { name, .. })
             | Binding::Var(VarBinding { name, .. })
-            | Binding::Param(ParamBinding { name, .. }) => Some(*name),
+            | Binding::Param(ParamBinding { name, .. }) => Some(name.clone()),
             Binding::Empty(_) => None,
         }
     }
