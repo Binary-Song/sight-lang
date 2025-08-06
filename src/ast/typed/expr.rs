@@ -75,8 +75,8 @@ pub struct VarExpr {
 }
 
 impl GetTy for VarExpr {
-    fn get_ty(&self, c: &mut Container) -> Uid<Type> {
-        self.ty
+    fn get_ty(&self, _c: &mut Container) -> Uid<Type> {
+        self.ty.clone()
     }
 }
 
@@ -89,8 +89,8 @@ pub struct AppExpr {
 }
 
 impl GetTy for AppExpr {
-    fn get_ty(&self, c: &mut Container) -> Uid<Type> {
-        self.ty
+    fn get_ty(&self, _c: &mut Container) -> Uid<Type> {
+        self.ty.clone()
     }
 }
 
@@ -118,8 +118,8 @@ impl GetTy for TupleExpr {
             .iter()
             .map(|elem| elem.clone().dec(c).get_ty(c))
             .collect::<Vec<_>>();
-        let tuple: Type = TupleType { elems: tys }.into();
-        tuple.enc(c)
+        let tuple = TupleType { elems: tys }.to_type();
+        tuple.int(c)
     }
 }
 
@@ -132,8 +132,8 @@ pub struct ProjExpr {
 }
 
 impl GetTy for ProjExpr {
-    fn get_ty(&self, c: &mut Container) -> Uid<Type> {
-        self.ty
+    fn get_ty(&self, _c: &mut Container) -> Uid<Type> {
+        self.ty.clone()
     }
 }
 

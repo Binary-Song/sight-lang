@@ -2,13 +2,11 @@ use crate::ast::raw::{
     BasicType, Block, Expr, Func, HasTupleSyntax, Lit, Param, Pattern, Stmt, TypeExpr,
 };
 use crate::ast::span::*;
-use crate::container::Container;
-use crate::container::Id;
+use crate::container::{ArenaItem, Container, Id, InternerItem};
 use peg::error::ParseError;
 use peg::str::LineCol;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Mutex;
 
 fn binary_op(
     ctx: Rc<RefCell<Container>>,
@@ -20,7 +18,7 @@ fn binary_op(
     let span = lhs.join_spans(&mut rhs);
     Expr::App {
         func: Box::new(Expr::Var {
-            name: ctx.borrow_mut().enc(op.to_string()),
+            name: op.to_string().enc(&mut *ctx.borrow_mut()),
             span: Some(op_span),
         }),
         args: vec![lhs, rhs],
@@ -107,7 +105,7 @@ peg::parser! {
         rule name(ctx: Rc<RefCell<Container>>) -> Id<String> =
             n:$(quiet!{[c if c.is_alphabetic() || c == '_' ][c if c.is_alphanumeric()|| c == '_']*}
             / expected!("name")) {
-                ctx.clone().borrow_mut().enc(n.to_string())
+                n.to_string().enc(&mut *ctx.borrow_mut())
             }
 
         rule unit_lit(ctx: Rc<RefCell<Container>>) -> () =
