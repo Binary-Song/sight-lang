@@ -3,6 +3,17 @@ use proc_macro2::Span;
 use quote::quote;
 use std::collections::HashMap;
 use syn::{self, parse::Parse};
+mod id;
+
+#[proc_macro_derive(IdEnum)]
+pub fn derive_id_enum_new(input: TokenStream) -> TokenStream {
+    id::derive_id_impl(input)
+}
+
+#[proc_macro_derive(UidEnum)]
+pub fn derive_uid_enum(input: TokenStream) -> TokenStream {
+    id::derive_uid_impl(input)
+}
 
 #[proc_macro_derive(Item)]
 pub fn derive_item(input: TokenStream) -> TokenStream {
@@ -198,273 +209,12 @@ pub fn derive_internable(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-struct SumIdArgs {
-    name: syn::Ident,
-    name_id: syn::Ident,
-    arms: Vec<(syn::Ident, syn::Type)>,
-}
-
-impl Parse for SumIdArgs {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let keyword = input.parse::<syn::Ident>()?;
-        assert_eq!(
-            keyword.to_string(),
-            "target_type",
-            "Expected 'sum_type' as the first argument"
-        );
-        input.parse::<syn::Token![:]>()?;
-        let name = input.parse::<syn::Ident>()?;
-        input.parse::<syn::Token![,]>()?;
-
-        let keyword = input.parse::<syn::Ident>()?;
-        assert_eq!(
-            keyword.to_string(),
-            "id_type",
-            "Expected 'sum_type' as the first argument"
-        );
-        input.parse::<syn::Token![:]>()?;
-        let name_id = input.parse::<syn::Ident>()?;
-        input.parse::<syn::Token![,]>()?;
-
-        let mut arms = vec![];
-        while !input.is_empty() {
-            // arm example: `foo: i32`
-            let arm_name = input.parse::<syn::Ident>()?;
-            input.parse::<syn::Token![:]>()?;
-            let arm_type = input.parse::<syn::Type>()?;
-            arms.push((arm_name, arm_type));
-            if input.peek(syn::Token![,]) {
-                input.parse::<syn::Token![,]>()?;
-            } else {
-                break;
-            }
-        }
-        Ok(SumIdArgs {
-            name,
-            name_id,
-            arms,
-        })
-    }
-}
-
-fn make_sum_id_impl(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    let args = syn::parse2::<SumIdArgs>(input).expect("Failed to parse SumIdArgs");
-    let name = &args.name;
-    let arms = &args.arms;
-    let name_id = &args.name_id;
-
-    let variants = arms.iter().map(|(arm_name, arm_type)| {
-        quote! { #arm_name(#arm_type) }
-    });
-
-    let variants_id = arms.iter().map(|(arm_name, arm_type)| {
-        quote! { #arm_name(Id<#arm_type>) }
-    });
-
-    let converts = arms.iter().map(|(arm_name, arm_type)| {
-        quote! {
-            impl From<#arm_type> for #name {
-                fn from(value: #arm_type) -> Self {
-                    #name::#arm_name(value)
-                }
-            }
-        }
-    });
-
-    let upcasts = arms.iter().map(|(arm_name, arm_type)| {
-        quote! {
-            impl #arm_type {
-                pub fn upcast(self) -> #name {
-                    #name::#arm_name(self)
-                }
-            }
-        }
-    });
-
-    let decode_ex_arms = arms.iter().map(|(arm_name, arm_type)| {
-        quote! {
-            #name_id::#arm_name(id) => #name::#arm_name(id.decode_ex(container)?)
-        }
-    });
-
-    let encode_ex_arms = arms.iter().map(|(arm_name, arm_type)| {
-        quote! {
-            #name::#arm_name(value) => #name_id::#arm_name(container.encode_ex(value)?)
-        }
-    });
-
-    quote! {
-
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]
-        pub enum #name {
-            #(#variants),*
-        }
-
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, LiteralValue)]
-        pub enum #name_id {
-            #(#variants_id),*
-        }
-
-        static_assertions::assert_not_impl_all!(#name: crate::container::Item);
-
-        #(#converts)*
-
-        #(#upcasts)*
-
-        impl #name {
-            pub fn encode<C: Container>(self, container: &mut C) -> Option<#name_id> {
-                match self.encode_ex(container) {
-                    Ok(x) => Some(x),
-                    Err(x) => None,
-                }
-            }
-            pub fn encode_f<C: Container>(self, container: &mut C) -> #name_id  {
-                self.encode_ex(container).unwrap()
-            }
-            pub fn encode_ex<C: Container>(self, container: &mut C) -> Result<#name_id, EncodeError> {
-                Ok(match self {
-                    #(#encode_ex_arms),*
-                })
-            }
-        }
-
-        impl #name_id {
-            pub fn decode<C: Container>(self, container: &C) -> Option<#name> {
-                match self.decode_ex(container) {
-                    Ok(x) => Some(x),
-                    Err(x) => None,
-                }
-            }
-            pub fn decode_f<C: Container>(self, container: &C) -> #name {
-                self.decode_ex(container).unwrap()
-            }
-            pub fn decode_ex<C: Container>(self, container: &C) -> Result<#name, DecodeError> {
-                Ok(match self {
-                    #(#decode_ex_arms),*
-                })
-            }
-        }
-    }
-}
-
-/// Generates a sum type and its corresponding ID type for container-based storage.
-///
-/// **Requirement: input types must implement `Item` and
-/// `target_type` must not implement `Item`.**
-///
-/// Example:
-///
-/// ```ignore
-/// make_sum_id!(
-///     target_type: Animal,
-///     id_type: AnimalId,
-///     Dog: DogStruct,
-///     Cat: CatStruct
-/// );
-/// ```
-///
-/// Generates `enum Animal{ Dog(DogStruct), Cat(CatStruct) }`,
-/// and `enum AnimalId{ Dog(Id<DogStruct>), Cat(Id<CatStruct>) }`.
-///
-#[proc_macro]
-pub fn make_sum_id(input: TokenStream) -> TokenStream {
-    make_sum_id_impl(input.into()).into()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quote::quote;
-
-    #[test]
-    fn make_sum_id_test() {
-        let input = quote! {
-            target_type: Animal,
-            id_type: IdAnimal,
-            Dog: Dog,
-            Cat: Cat,
-        };
-        // =============================================================================
-        let expected_output = quote! {
-        #[derive(Debug , Clone , PartialEq , Eq , Hash , LiteralValue)]
-        pub enum Animal { Dog (Dog) , Cat (Cat) }
-
-        #[derive(Debug , Clone , Copy , PartialEq , Eq , Hash , LiteralValue)]
-        pub enum IdAnimal { Dog (Id < Dog >) , Cat (Id < Cat >) }
-
-        static_assertions :: assert_not_impl_all ! (Animal : crate :: container :: Item) ;
-
-        impl From < Dog > for Animal {
-            fn from (value : Dog) -> Self {
-                Animal :: Dog (value)
-            }
-        }
-
-        impl From < Cat > for Animal {
-            fn from (value : Cat) -> Self {
-                Animal :: Cat (value)
-            }
-        }
-
-        impl Dog {
-            pub fn upcast (self) -> Animal {
-                Animal :: Dog (self)
-            }
-        }
-
-        impl Cat {
-            pub fn upcast (self) -> Animal {
-                Animal :: Cat (self)
-            }
-        }
-
-        impl Animal {
-            pub fn encode < C : Container > (self , container : & mut C) -> Option < IdAnimal > {
-                match self . encode_ex (container) {
-                    Ok (x) => Some (x) ,
-                    Err (x) => None ,
-                }
-            }
-
-            pub fn encode_f < C : Container > (self , container : & mut C) -> IdAnimal {
-                self . encode_ex (container) . unwrap ()
-            }
-
-            pub fn encode_ex < C : Container > (self , container : & mut C) -> Result < IdAnimal , EncodeError > {
-                Ok (match self {
-                    Animal :: Dog (value) => IdAnimal :: Dog (container . encode_ex (value) ?) ,
-                    Animal :: Cat (value) => IdAnimal :: Cat (container . encode_ex (value) ?) ,
-                })
-            }
-        }
-
-        impl IdAnimal {
-            pub fn decode < C : Container > (self , container : & C) -> Option < Animal > {
-                match self . decode_ex (container) {
-                    Ok (x) => Some (x) ,
-                    Err (x) => None ,
-                }
-            }
-
-            pub fn decode_f < C : Container > (self , container : & C) -> Animal {
-                self . decode_ex (container) . unwrap ()
-            }
-
-            pub fn decode_ex < C : Container > (self , container : & C) -> Result < Animal , DecodeError > {
-                Ok (match self {
-                    IdAnimal :: Dog (id) => Animal :: Dog (id . decode_ex (container) ?) ,
-                    IdAnimal :: Cat (id) => Animal :: Cat (id . decode_ex (container) ?) ,
-                })
-            }
-        }
-        };
-        // ========================================================================
-        let expected_output = expected_output.to_string();
-        fn clean_up(input: String) -> String {
-            input.replace(" ", "").replace(",", "")
-        }
-        let actual_output = make_sum_id_impl(input).to_string();
-        println!("GENERATED {actual_output}");
-        assert_eq!(clean_up(expected_output), clean_up(actual_output));
-    }
+#[proc_macro_derive(Id)]
+pub fn derive_id_enum(input: TokenStream) -> TokenStream {
+    let ast = syn::parse::<syn::DeriveInput>(input).unwrap();
+    let name = &ast.ident;
+    let gen = quote! {
+        impl crate::utils::interning::Internable for #name {}
+    };
+    gen.into()
 }

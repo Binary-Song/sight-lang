@@ -170,7 +170,7 @@ pub enum Stmt {
     While {
         cond: Expr,
         body: Block,
-    }
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue)]

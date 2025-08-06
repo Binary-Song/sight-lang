@@ -28,7 +28,7 @@ impl Expr {
 }
 
 impl GetTy for Expr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         match self {
             Expr::Lit(e) => e.get_ty(c),
             Expr::Var(e) => e.get_ty(c),
@@ -47,10 +47,10 @@ pub enum Literal {
 }
 
 impl GetTy for Literal {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         match self {
-            Literal::Int(_) => PrimitiveType::Int.upcast().encode_f(c),
-            Literal::Bool(_) => PrimitiveType::Bool.upcast().encode_f(c),
+            Literal::Int(_) => PrimitiveType::Int.upcast().enc(c),
+            Literal::Bool(_) => PrimitiveType::Bool.upcast().enc(c),
         }
     }
 }
@@ -62,7 +62,7 @@ pub struct LitExpr {
 }
 
 impl GetTy for LitExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         self.value.get_ty(c)
     }
 }
@@ -76,7 +76,7 @@ pub struct VarExpr {
 }
 
 impl GetTy for VarExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         self.ty
     }
 }
@@ -90,7 +90,7 @@ pub struct AppExpr {
 }
 
 impl GetTy for AppExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         self.ty
     }
 }
@@ -101,8 +101,8 @@ pub struct BlockExpr {
 }
 
 impl GetTy for BlockExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
-        self.block.decode_f(c).get_ty(c)
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
+        self.block.dec(c).get_ty(c)
     }
 }
 
@@ -113,14 +113,14 @@ pub struct TupleExpr {
 }
 
 impl GetTy for TupleExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         let tys = self
             .elems
             .iter()
-            .map(|elem| elem.clone().decode_f(c).get_ty(c))
+            .map(|elem| elem.clone().dec(c).get_ty(c))
             .collect::<Vec<_>>();
         let tuple: Type = TupleType { elems: tys }.into();
-        tuple.encode_f(c)
+        tuple.enc(c)
     }
 }
 
@@ -133,7 +133,7 @@ pub struct ProjExpr {
 }
 
 impl GetTy for ProjExpr {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
         self.ty
     }
 }
@@ -146,7 +146,7 @@ pub struct Block {
 }
 
 impl GetTy for Block {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type> {
-        self.value.decode_f(c).get_ty(c)
+    fn get_ty(&self, c: &mut Container) -> Id<Type> {
+        self.value.dec(c).get_ty(c)
     }
 }

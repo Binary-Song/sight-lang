@@ -2,7 +2,7 @@ use crate::{
     ast::typed::{expr::Block, ty::Type, FunctionType},
     container::*,
 };
-use sight_macros::{make_sum_id, Item, LiteralValue};
+use sight_macros::{ Item, LiteralValue};
 
 make_sum_id!(
     target_type: Binding,
@@ -12,6 +12,7 @@ make_sum_id!(
     Var: VarBinding,
     Param: ParamBinding,
 );
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, LiteralValue, Item)]
 pub struct EmptyBinding {
@@ -33,13 +34,13 @@ pub struct FuncBinding {
 }
 
 impl FuncBinding {
-    pub fn ty(&self, c: &mut impl Container) -> Id<Type> {
+    pub fn ty(&self, c: &mut Container) -> Id<Type> {
         FunctionType {
             lhs: self.param_tys.clone(),
             rhs: self.ret_ty,
         }
         .to_type()
-        .encode_f(c)
+        .enc(c)
     }
 }
 

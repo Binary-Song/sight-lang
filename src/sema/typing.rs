@@ -41,11 +41,11 @@ pub enum TypingError {
 pub type TypingResult<T> = Result<T, TypingError>;
 
 impl GetTy for r::BasicType {
-    fn get_ty(&self, container: &mut impl Container) -> Id<t::Type> {
+    fn get_ty(&self, container: &mut Container) -> Id<t::Type> {
         match self {
-            r::BasicType::Unit => t::Type::unit().encode_f(container),
-            r::BasicType::Bool => t::PrimitiveType::Bool.upcast().encode_f(container),
-            r::BasicType::Int => t::PrimitiveType::Int.upcast().encode_f(container),
+            r::BasicType::Unit => t::Type::unit().enc(container),
+            r::BasicType::Bool => t::PrimitiveType::Bool.upcast().enc(container),
+            r::BasicType::Int => t::PrimitiveType::Int.upcast().enc(container),
         }
     }
 }
@@ -68,14 +68,14 @@ impl r::TypeExpr {
                 rhs: rhs.get_ty(container)?,
             }
             .to_type()
-            .encode_f(container)),
+            .enc(container)),
             r::TypeExpr::Tuple { elems, .. } | r::TypeExpr::ClosedTuple { elems, .. } => {
                 let mut tuple_elems = vec![];
                 for e in elems {
                     let ty = e.get_ty(container)?;
                     tuple_elems.push(ty);
                 }
-                Ok(t::TupleType { elems: tuple_elems }.to_type().encode_f(container))
+                Ok(t::TupleType { elems: tuple_elems }.to_type().enc(container))
             }
         }
     }
@@ -83,12 +83,12 @@ impl r::TypeExpr {
 
 pub fn lookup_name(
     name: Id<String>,
-    container: &mut impl Container,
+    container: &mut Container,
     context: IdBinding,
 ) -> Option<IdBinding> {
     let mut current = Some(context);
     while let Some(id) = current {
-        let binding = id.decode_f(container);
+        let binding = id.dec(container);
         if let Some(binding_name) = binding.name() {
             if binding_name == name {
                 return Some(id);
@@ -109,7 +109,7 @@ pub fn lookup_name(
 pub fn check_type_of_expr(
     expr: r::Expr,
     ty: Id<t::Type>,
-    container: &mut impl Container,
+    container: &mut Container,
     context: IdBinding,
     local_vars: LocalVars,
 ) -> TypingResult<(t::Expr, LocalVars)> {
@@ -134,14 +134,14 @@ pub fn check_type_of_expr(
 /// `binding` extended with recursive bindings in the block
 pub fn collect_block_bindings(
     block: &r::Block,
-    container: &mut impl Container,
+    container: &mut Container,
     mut context: IdBinding,
 ) -> TypingResult<IdBinding> {
     let mut used_names = HashSet::<Id<String>>::new();
     /// Gets the binding id if this Stmt
     /// is a FuncStmt.
     fn handle_stmt(
-        container: &mut impl Container,
+        container: &mut Container,
         parent_binding: IdBinding,
         stmt: &r::Stmt,
     ) -> TypingResult<Option<Binding>> {
@@ -182,7 +182,7 @@ pub fn collect_block_bindings(
                     return Err(TypingError::DuplicateName(name));
                 }
                 used_names.insert(name);
-                let binding_id = new_func_binding.encode_f(container);
+                let binding_id = new_func_binding.enc(container);
                 context = binding_id;
             }
             None => {}
@@ -193,7 +193,7 @@ pub fn collect_block_bindings(
 
 pub fn infer_type_for_block(
     block: r::Block,
-    container: &mut impl Container,
+    container: &mut Container,
     context: IdBinding,
     mut local_vars: LocalVars,
 ) -> TypingResult<(t::Block, LocalVars)> {
@@ -206,7 +206,7 @@ pub fn infer_type_for_block(
     for stmt in block.stmts {
         let typed_stmt;
         (typed_stmt, ctx, local_vars) = infer_type_for_stmt(stmt, container, ctx, local_vars)?;
-        let typed_stmt = typed_stmt.encode_f(container);
+        let typed_stmt = typed_stmt.enc(container);
         typed_stmts.push(typed_stmt);
     }
     // type the block's return value
@@ -218,7 +218,7 @@ pub fn infer_type_for_block(
         }
         None => t::Expr::unit(block.span.clone().map(|span| Span(span.1, span.1))),
     };
-    let typed_value = typed_value.encode_f(container);
+    let typed_value = typed_value.enc(container);
     Ok((
         t::Block {
             stmts: typed_stmts,
@@ -240,7 +240,7 @@ pub fn infer_type_for_block(
 /// - `LocalVars`: `local_vars` extended with local vars introduced by this stmt.
 pub fn infer_type_for_stmt(
     stmt: r::Stmt,
-    container: &mut impl Container,
+    container: &mut Container,
     context: IdBinding,
     mut local_vars: LocalVars,
 ) -> TypingResult<(t::Stmt, IdBinding, LocalVars)> {
@@ -274,12 +274,12 @@ pub fn infer_type_for_stmt(
                 ty: ty,
                 index: var_index,
             };
-            let var_binding_id = var_binding.encode_f(container);
+            let var_binding_id = var_binding.enc(container);
             // add into context
             let ctx = IdBinding::Var(var_binding_id);
             // add into local vars
             local_vars.push(var_binding_id);
-            let rhs_id = rhs.encode_f(container);
+            let rhs_id = rhs.enc(container);
             let stmt = t::LetStmt {
                 binding: var_binding_id,
                 name_span: name_span,
@@ -297,7 +297,7 @@ pub fn infer_type_for_stmt(
                 IdBinding::Func(id) => id,
                 _ => panic!("Should be function binding"),
             };
-            let mut func_binding = func_binding_id.decode_f(container);
+            let mut func_binding = func_binding_id.dec(container);
             // add params into context
             let original_ctx = context;
             let mut ctx = original_ctx;
@@ -309,7 +309,7 @@ pub fn infer_type_for_stmt(
                     ty: func_binding.param_tys[param_idx],
                     index: param_idx,
                 };
-                let param_binding_id = param_binding.encode_f(container);
+                let param_binding_id = param_binding.enc(container);
                 params.push(param_binding_id);
                 ctx = IdBinding::Param(param_binding_id);
             }
@@ -322,7 +322,7 @@ pub fn infer_type_for_stmt(
             func_binding.full_data = Some(FuncFullData {
                 local_vars: local_vars_of_fn,
                 params: params,
-                body_id: typed_body.encode_f(container),
+                body_id: typed_body.enc(container),
             });
             // put the new func binding (with full data) back into the container
             // with the same id
@@ -357,7 +357,7 @@ pub fn infer_type_for_stmt(
 /// `LocalVars`: `local_vars` extended with local vars introduced by this expr.
 pub fn infer_type_for_expr(
     expr: r::Expr,
-    container: &mut impl Container,
+    container: &mut Container,
     context: IdBinding,
     mut local_vars: LocalVars,
 ) -> TypingResult<(t::Expr, LocalVars)> {
@@ -390,7 +390,7 @@ pub fn infer_type_for_expr(
         }),
         r::Expr::Var { name, span } => match lookup_name(name, container, context) {
             Some(binding_id) => {
-                let binding = binding_id.decode_f(container);
+                let binding = binding_id.dec(container);
                 let result = match binding {
                     Binding::Var(VarBinding {
                         parent,
@@ -418,7 +418,7 @@ pub fn infer_type_for_expr(
                             rhs: ret_ty,
                         }
                         .to_type()
-                        .encode_f(container),
+                        .enc(container),
                         span,
                     }
                     .upcast(),
@@ -433,7 +433,7 @@ pub fn infer_type_for_expr(
             let typed_func;
             (typed_func, local_vars) = infer_type_for_expr(*func, container, context, local_vars)?;
             let func_ty_id = typed_func.get_ty(container);
-            let func_ty = func_ty_id.decode_f(container);
+            let func_ty = func_ty_id.dec(container);
             // get param and ret ty
             let (param_tys, ret_ty) = match func_ty {
                 t::Type::Function(t::FunctionType { lhs, rhs }) => (lhs, rhs),
@@ -450,12 +450,12 @@ pub fn infer_type_for_expr(
                 let typed_arg;
                 (typed_arg, local_vars) =
                     check_type_of_expr(arg.clone(), *param_ty, container, context, local_vars)?;
-                typed_args.push(typed_arg.encode_f(container));
+                typed_args.push(typed_arg.enc(container));
             }
             // output return type
             Ok((
                 t::AppExpr {
-                    callee: typed_func.encode_f(container),
+                    callee: typed_func.enc(container),
                     args: typed_args,
                     ty: ret_ty,
                     span,
@@ -469,7 +469,7 @@ pub fn infer_type_for_expr(
             for elem in elems {
                 let typed_elem;
                 (typed_elem, local_vars) = infer_type_for_expr(elem, container, context, local_vars)?;
-                typed_elems.push(typed_elem.encode_f(container));
+                typed_elems.push(typed_elem.enc(container));
             }
             Ok((
                 t::TupleExpr {
@@ -485,7 +485,7 @@ pub fn infer_type_for_expr(
             let typed_tuple;
             (typed_tuple, local_vars) = infer_type_for_expr(*tuple, container, context, local_vars)?;
             let tuple_ty_id = typed_tuple.get_ty(container);
-            let tuple_ty = tuple_ty_id.decode_f(container);
+            let tuple_ty = tuple_ty_id.dec(container);
             // get the elem ty at index
             let elem_ty = match tuple_ty {
                 t::Type::Tuple(TupleType { elems }) => match elems.get(index) {
@@ -496,7 +496,7 @@ pub fn infer_type_for_expr(
             };
             // return the typed version of the proj expr
             let typed_proj_expr = t::ProjExpr {
-                tuple: typed_tuple.encode_f(container),
+                tuple: typed_tuple.enc(container),
                 index,
                 span,
                 ty: elem_ty,
@@ -508,7 +508,7 @@ pub fn infer_type_for_expr(
             let typed_block;
             (typed_block, local_vars) = infer_type_for_block(*block, container, context, local_vars)?;
             let typed_block_expr = BlockExpr {
-                block: typed_block.encode_f(container),
+                block: typed_block.enc(container),
             };
             Ok((typed_block_expr.upcast(), local_vars))
         }

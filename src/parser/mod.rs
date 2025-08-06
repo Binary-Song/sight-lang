@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-fn binary_op<C: Container>(
+fn binary_op(
     ctx: Rc<RefCell<C>>,
     op: &str,
     op_span: Span,
@@ -20,7 +20,7 @@ fn binary_op<C: Container>(
     let span = lhs.join_spans(&mut rhs);
     Expr::App {
         func: Box::new(Expr::Var {
-            name: ctx.borrow_mut().encode_f(op.to_string()),
+            name: ctx.borrow_mut().enc(op.to_string()),
             span: Some(op_span),
         }),
         args: vec![lhs, rhs],
@@ -107,7 +107,7 @@ peg::parser! {
         rule name<C: Container,>(ctx: Rc<RefCell<C>>) -> Id<String> =
             n:$(quiet!{[c if c.is_alphabetic() || c == '_' ][c if c.is_alphanumeric()|| c == '_']*}
             / expected!("name")) {
-                ctx.clone().borrow_mut().encode_f(n.to_string())
+                ctx.clone().borrow_mut().enc(n.to_string())
             }
 
         rule unit_lit<C: Container,>(ctx: Rc<RefCell<C>>) -> () =
@@ -278,7 +278,7 @@ peg::parser! {
                 }
             }
 
-        pub rule if_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt =
+        pub rule if_stmt(ctx: Rc<RefCell<C>>) -> Stmt =
             "if" __
             cond:expr(ctx.clone()) _
             then_br: block(ctx.clone()) _
@@ -291,7 +291,7 @@ peg::parser! {
                 }
             }
 
-        pub rule while_stmt<C: Container>(ctx: Rc<RefCell<C>>) -> Stmt =
+        pub rule while_stmt(ctx: Rc<RefCell<C>>) -> Stmt =
             "while" __
             cond:expr(ctx.clone()) _
             body: block(ctx.clone()) {

@@ -11,6 +11,6 @@ use crate::container::Container;
 use crate::container::Id;
 
 pub trait GetTy {
-    fn get_ty(&self, c: &mut impl Container) -> Id<Type>;
+    fn get_ty(&self, c: &mut Container) -> Id<Type>;
 }
 
